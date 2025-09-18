@@ -53,6 +53,7 @@ function RootLayoutNav() {
       <Stack>
         <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
         <Stack.Screen name="modal" options={{ presentation: 'modal' }} />
+        <Stack.Screen name="add-expense" options={{ presentation: 'modal', title: 'Ajouter une dépense' }} />
       </Stack>
     </ThemeProvider>
   );
