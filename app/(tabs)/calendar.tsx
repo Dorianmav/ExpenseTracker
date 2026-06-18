@@ -1,103 +1,149 @@
-import React, { useState, useEffect } from 'react';
+import React, { useMemo, useState } from 'react';
 import { StyleSheet, FlatList, TouchableOpacity } from 'react-native';
 import { Text, View } from '@/components/Themed';
-import { Calendar } from 'react-native-calendars';
-import { format } from 'date-fns';
+import { Calendar, LocaleConfig } from 'react-native-calendars';
+import { addMonths, endOfMonth, format, parse, startOfMonth, subMonths } from 'date-fns';
 import { fr } from 'date-fns/locale';
 import { useFocusEffect } from '@react-navigation/native';
+import { router } from 'expo-router';
 import { expenseService, PaymentEvent } from '@/services/expenseService';
 
 type MarkedDates = {
   [date: string]: {
     selected?: boolean;
-    marked?: boolean;
-    dotColor?: string;
     selectedColor?: string;
+    dots?: {
+      key: string;
+      color: string;
+    }[];
   };
 };
+
+const paymentTypeColors = {
+  subscription: '#3498db',
+  installment: '#e74c3c',
+} as const;
+
+const getProjectionRange = (month: string) => {
+  const currentMonthDate = parse(`${month}-01`, 'yyyy-MM-dd', new Date());
+
+  return {
+    startDate: startOfMonth(subMonths(currentMonthDate, 1)),
+    endDate: endOfMonth(addMonths(currentMonthDate, 1)),
+  };
+};
+
+LocaleConfig.locales['fr'] = {
+  monthNames: [
+    'Janvier',
+    'Février',
+    'Mars',
+    'Avril',
+    'Mai',
+    'Juin',
+    'Juillet',
+    'Août',
+    'Septembre',
+    'Octobre',
+    'Novembre',
+    'Décembre',
+  ],
+  monthNamesShort: ['Janv.', 'Févr.', 'Mars', 'Avril', 'Mai', 'Juin', 'Juil.', 'Août', 'Sept.', 'Oct.', 'Nov.', 'Déc.'],
+  dayNames: ['Dimanche', 'Lundi', 'Mardi', 'Mercredi', 'Jeudi', 'Vendredi', 'Samedi'],
+  dayNamesShort: ['Dim.', 'Lun.', 'Mar.', 'Mer.', 'Jeu.', 'Ven.', 'Sam.'],
+  today: "Aujourd'hui",
+};
+LocaleConfig.defaultLocale = 'fr';
+
 
 export default function CalendarScreen() {
   const today = format(new Date(), 'yyyy-MM-dd');
   const [selectedDate, setSelectedDate] = useState(today);
   const [upcomingPayments, setUpcomingPayments] = useState<PaymentEvent[]>([]);
   const [currentMonth, setCurrentMonth] = useState(format(new Date(), 'yyyy-MM'));
-  // Utiliser un état séparé pour forcer le calendrier à se mettre à jour
   const [calendarKey, setCalendarKey] = useState(0);
-  
+  const [isLoading, setIsLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const loadPayments = React.useCallback(async () => {
+    setIsLoading(true);
+    setError(null);
+
+    try {
+      const { startDate, endDate } = getProjectionRange(currentMonth);
+      const payments = await expenseService.getAllUpcomingPayments(startDate, endDate);
+      setUpcomingPayments(payments);
+    } catch (loadError) {
+      console.error(loadError);
+      setError('Impossible de charger le calendrier');
+    } finally {
+      setIsLoading(false);
+    }
+  }, [currentMonth]);
+
   const goToToday = () => {
     setSelectedDate(today);
-    // Incrémenter la clé pour forcer le calendrier à se réinitialiser
-    setCalendarKey(prevKey => prevKey + 1);
+    setCurrentMonth(format(new Date(), 'yyyy-MM'));
+    setCalendarKey((prevKey) => prevKey + 1);
   };
-  
-  // Charger les paiements à chaque fois que l'écran est affiché
+
   useFocusEffect(
     React.useCallback(() => {
-      const loadPayments = () => {
-        const payments = expenseService.getAllUpcomingPayments();
-        setUpcomingPayments(payments);
-      };
-      
       loadPayments();
-      
-      return () => {};
-    }, [])
+    }, [loadPayments]),
   );
-  
-  // Préparer les marqueurs pour le calendrier
-  const markedDates: MarkedDates = upcomingPayments.reduce((acc: MarkedDates, payment) => {
-    // Vérifier si cette date existe déjà dans l'accumulateur
-    const existingDate = acc[payment.date];
-    
-    if (existingDate && existingDate.marked) {
-      // Si la date existe déjà et est marquée, vérifions les types
-      const existingType = existingDate.dotColor === '#3498db' ? 'subscription' : 'installment';
-      
-      // Si les types sont différents, utiliser la couleur pour "les deux"
-      if (existingType !== payment.type) {
-        return {
-          ...acc,
-          [payment.date]: { 
-            marked: true, 
-            dotColor: '#8e728c', // Couleur pour "les deux"
-            selected: payment.date === selectedDate,
-            selectedColor: payment.date === selectedDate ? '#2ecc71' : undefined
-          }
-        };
-      }
-    }
-    
-    // Sinon, ajouter normalement
+
+  const markedDates = useMemo(() => {
+    const dates = upcomingPayments.reduce((acc: MarkedDates, payment) => {
+      const currentDate = acc[payment.date] ?? {};
+      const existingDots = currentDate.dots ?? [];
+
+      return {
+        ...acc,
+        [payment.date]: {
+          ...currentDate,
+          dots: [
+            ...existingDots,
+            {
+              key: payment.id,
+              color: paymentTypeColors[payment.type],
+            },
+          ],
+        },
+      };
+    }, {} as MarkedDates);
+
     return {
-      ...acc,
-      [payment.date]: { 
-        marked: true, 
-        dotColor: payment.type === 'subscription' ? '#3498db' : '#e74c3c',
-        selected: payment.date === selectedDate,
-        selectedColor: payment.date === selectedDate ? '#2ecc71' : undefined
-      }
+      ...dates,
+      [selectedDate]: {
+        ...dates[selectedDate],
+        selected: true,
+        selectedColor: '#2ecc71',
+      },
     };
-  }, {
-    [selectedDate]: { selected: true, selectedColor: '#2ecc71' }
-  });
-  
-  // Filtrer les paiements pour la date sélectionnée
-  const paymentsForSelectedDate = upcomingPayments.filter(
-    payment => payment.date === selectedDate
-  );
-  
+  }, [selectedDate, upcomingPayments]);
+
+  const paymentsForSelectedDate = upcomingPayments.filter((payment) => payment.date === selectedDate);
+
   const renderPaymentItem = ({ item }: { item: PaymentEvent }) => (
-    <TouchableOpacity style={styles.paymentItem}>
+    <TouchableOpacity
+      style={styles.paymentItem}
+      onPress={() =>
+        router.push({
+          pathname: '/payment-detail',
+          params: { type: item.type, id: String(item.ownerId) },
+        })
+      }
+    >
       <View style={styles.paymentHeader}>
         <Text style={styles.paymentDescription}>{item.description}</Text>
         <Text style={styles.paymentAmount}>{item.amount.toFixed(2)} €</Text>
       </View>
       <View style={styles.paymentDetails}>
-        <Text style={styles.paymentCategory}>{item.category}</Text>
         <Text style={styles.paymentType}>
           {item.type === 'subscription' ? 'Abonnement' : 'Paiement échelonné'}
         </Text>
-        <Text style={styles.paymentBank}>{item.bank}</Text>
+        <Text style={styles.paymentBank}>{item.status === 'paid' ? 'Payé' : 'À venir'}</Text>
       </View>
     </TouchableOpacity>
   );
@@ -110,7 +156,7 @@ export default function CalendarScreen() {
           <Text style={styles.todayButtonText}>Aujourd'hui</Text>
         </TouchableOpacity>
       </View>
-      
+
       <Calendar
         key={calendarKey}
         style={styles.calendar}
@@ -118,15 +164,18 @@ export default function CalendarScreen() {
           todayTextColor: '#2ecc71',
           arrowColor: '#3498db',
         }}
+        markingType={'multi-dot'}
         markedDates={markedDates}
         onDayPress={(day) => setSelectedDate(day.dateString)}
         onMonthChange={(month) => setCurrentMonth(month.dateString.substring(0, 7))}
-        monthFormat={'MMMM yyyy'}
-        hideExtraDays={true}
+        monthFormat="MMMM yyyy"
+        firstDay={1}
+        enableSwipeMonths
+        hideExtraDays
         current={selectedDate}
         initialDate={selectedDate}
       />
-      
+
       <View style={styles.legendContainer}>
         <View style={styles.legendItem}>
           <View style={[styles.legendDot, { backgroundColor: '#3498db' }]} />
@@ -136,21 +185,25 @@ export default function CalendarScreen() {
           <View style={[styles.legendDot, { backgroundColor: '#e74c3c' }]} />
           <Text style={styles.legendText}>Paiements échelonnés</Text>
         </View>
-        <View style={styles.legendItem}>
-          <View style={[styles.legendDot, { backgroundColor: '#8e728c' }]} />
-          <Text style={styles.legendText}>Les deux</Text>
-        </View>
       </View>
-      
+
       <Text style={styles.sectionTitle}>
-        Paiements du {format(new Date(selectedDate), 'dd-MM-yyyy', { locale: fr })}
+        Paiements du {format(parse(selectedDate, 'yyyy-MM-dd', new Date()), 'dd/MM/yyyy', { locale: fr })}
       </Text>
-      
-      {paymentsForSelectedDate.length > 0 ? (
+
+      {isLoading ? (
+        <View style={styles.emptyContainer}>
+          <Text style={styles.emptyText}>Chargement...</Text>
+        </View>
+      ) : error ? (
+        <View style={styles.emptyContainer}>
+          <Text style={styles.emptyText}>{error}</Text>
+        </View>
+      ) : paymentsForSelectedDate.length > 0 ? (
         <FlatList
           data={paymentsForSelectedDate}
           renderItem={renderPaymentItem}
-          keyExtractor={item => item.id}
+          keyExtractor={(item) => item.id}
           style={styles.list}
         />
       ) : (
@@ -177,6 +230,7 @@ const styles = StyleSheet.create({
   title: {
     fontSize: 24,
     fontWeight: 'bold',
+    flex: 1,
   },
   todayButton: {
     backgroundColor: '#3498db',
@@ -246,6 +300,8 @@ const styles = StyleSheet.create({
   paymentDescription: {
     fontSize: 16,
     fontWeight: '500',
+    flex: 1,
+    marginRight: 12,
   },
   paymentAmount: {
     fontSize: 18,
@@ -255,10 +311,6 @@ const styles = StyleSheet.create({
   paymentDetails: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-  },
-  paymentCategory: {
-    fontSize: 14,
-    color: '#7f8c8d',
   },
   paymentType: {
     fontSize: 14,
@@ -278,5 +330,6 @@ const styles = StyleSheet.create({
   emptyText: {
     fontSize: 16,
     color: '#95a5a6',
+    textAlign: 'center',
   },
 });
