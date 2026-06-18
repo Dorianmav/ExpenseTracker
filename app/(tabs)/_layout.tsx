@@ -6,6 +6,7 @@ import { Pressable } from 'react-native';
 import Colors from '@/constants/Colors';
 import { useColorScheme } from '@/components/useColorScheme';
 import { useClientOnlyValue } from '@/components/useClientOnlyValue';
+import { ThemeModeButton } from '@/components/ThemeModeButton';
 
 // You can explore the built-in icon families and icons on the web at https://icons.expo.fyi/
 function TabBarIcon(props: {
@@ -31,18 +32,21 @@ export default function TabLayout() {
           title: 'Accueil',
           tabBarIcon: ({ color }) => <TabBarIcon name="home" color={color} />,
           headerRight: () => (
-            <Link href="/add-expense" asChild>
-              <Pressable>
-                {({ pressed }) => (
-                  <FontAwesome
-                    name="plus-circle"
-                    size={25}
-                    color={Colors[colorScheme ?? 'light'].text}
-                    style={{ marginRight: 15, opacity: pressed ? 0.5 : 1 }}
-                  />
-                )}
-              </Pressable>
-            </Link>
+            <>
+              <ThemeModeButton />
+              <Link href="/add-expense" asChild>
+                <Pressable>
+                  {({ pressed }) => (
+                    <FontAwesome
+                      name="plus-circle"
+                      size={25}
+                      color={Colors[colorScheme ?? 'light'].text}
+                      style={{ marginRight: 15, opacity: pressed ? 0.5 : 1 }}
+                    />
+                  )}
+                </Pressable>
+              </Link>
+            </>
           ),
         }}
       />
@@ -51,6 +55,15 @@ export default function TabLayout() {
         options={{
           title: 'Calendrier',
           tabBarIcon: ({ color }) => <TabBarIcon name="calendar" color={color} />,
+          headerRight: () => <ThemeModeButton />,
+        }}
+      />
+      <Tabs.Screen
+        name="payments"
+        options={{
+          title: 'Paiements',
+          tabBarIcon: ({ color }) => <TabBarIcon name="credit-card" color={color} />,
+          headerRight: () => <ThemeModeButton />,
         }}
       />
     </Tabs>
