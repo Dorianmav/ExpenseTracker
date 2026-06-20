@@ -1,16 +1,15 @@
 import React, { useState } from 'react';
 import { StyleSheet, FlatList, TouchableOpacity } from 'react-native';
-import { Text, View } from '@/components/Themed';
+import FontAwesome from '@expo/vector-icons/FontAwesome';
+import { Text, View, useThemeColor } from '@/components/Themed';
 import { format, parse } from 'date-fns';
 import { fr } from 'date-fns/locale';
 import { useFocusEffect } from '@react-navigation/native';
 import { router } from 'expo-router';
+import { ExpenseListItem, ExpenseListItemData } from '@/components/ExpenseListItem';
 import { expenseService, Expense, PaymentEvent } from '@/services/expenseService';
 
-type TodayListItem = Expense | (Omit<PaymentEvent, 'date'> & { date: Date; occurrenceId: number });
-
-const getPaymentTypeLabel = (type: PaymentEvent['type']) =>
-  type === 'subscription' ? 'Abonnement' : 'Paiement échelonné';
+type TodayListItem = ExpenseListItemData;
 
 const mapPaymentEventToTodayItem = (payment: PaymentEvent): TodayListItem => ({
   ...payment,
@@ -31,6 +30,8 @@ const openTodayItem = (item: TodayListItem) => {
 };
 
 export default function HomeScreen() {
+  const mutedColor = useThemeColor({}, 'muted');
+  const primaryColor = useThemeColor({}, 'primary');
   const [expenses, setExpenses] = useState<TodayListItem[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -50,7 +51,7 @@ export default function HomeScreen() {
             expenseService.getTodayExpenses(),
             expenseService.getPaymentsForDate(calendarDate),
           ]);
-          const todayExpenseIds = new Set(todayExpenses.map((expense) => Number(expense.id)));
+          const todayExpenseIds = new Set(todayExpenses.map((expense: Expense) => Number(expense.id)));
           const plannedPayments = todayPayments
             .filter((payment) => !payment.expenseId || !todayExpenseIds.has(payment.expenseId))
             .map(mapPaymentEventToTodayItem);
@@ -58,7 +59,7 @@ export default function HomeScreen() {
           if (isActive) setExpenses([...todayExpenses, ...plannedPayments]);
         } catch (loadError) {
           console.error(loadError);
-          if (isActive) setError("Impossible de charger les dépenses du jour");
+          if (isActive) setError('Impossible de charger les dépenses du jour');
         } finally {
           if (isActive) setIsLoading(false);
         }
@@ -73,28 +74,17 @@ export default function HomeScreen() {
   );
 
   const renderExpenseItem = ({ item }: { item: TodayListItem }) => (
-    <TouchableOpacity style={styles.expenseItem} onPress={() => openTodayItem(item)}>
-      <View style={styles.expenseHeader}>
-        <Text style={styles.expenseDescription}>{item.description}</Text>
-        <Text style={styles.expenseAmount}>{item.amount.toFixed(2)} €</Text>
-      </View>
-      <View style={styles.expenseDetails}>
-        <Text style={styles.expenseCategory}>{item.category}</Text>
-        <Text style={styles.expenseBank}>
-          {item.type === 'simple' ? item.bank : getPaymentTypeLabel(item.type)}
-        </Text>
-      </View>
-    </TouchableOpacity>
+    <ExpenseListItem item={item} onPress={() => openTodayItem(item)} />
   );
 
   return (
     <View style={styles.container}>
-      <Text style={styles.dateHeader}>{today}</Text>
+      <Text style={[styles.dateHeader, { color: mutedColor }]}>{today}</Text>
       <Text style={styles.title}>Dépenses du jour</Text>
 
       {isLoading ? (
         <View style={styles.emptyContainer}>
-          <Text style={styles.emptyText}>Chargement...</Text>
+          <Text style={[styles.emptyText, { color: mutedColor }]}>Chargement...</Text>
         </View>
       ) : error ? (
         <View style={styles.emptyContainer}>
@@ -106,12 +96,21 @@ export default function HomeScreen() {
           renderItem={renderExpenseItem}
           keyExtractor={(item) => item.id}
           style={styles.list}
+          contentContainerStyle={styles.listContent}
         />
       ) : (
         <View style={styles.emptyContainer}>
-          <Text style={styles.emptyText}>Aucune dépense aujourd'hui</Text>
+          <Text style={[styles.emptyText, { color: mutedColor }]}>Aucune dépense aujourd'hui</Text>
         </View>
       )}
+
+      <TouchableOpacity
+        style={[styles.addButton, { backgroundColor: primaryColor }]}
+        onPress={() => router.push('/add-expense')}
+        activeOpacity={0.85}
+      >
+        <FontAwesome name="plus" size={24} color="#fff" />
+      </TouchableOpacity>
     </View>
   );
 }
@@ -120,60 +119,41 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     padding: 16,
+    paddingTop: 48,
     width: '100%',
   },
   dateHeader: {
     fontSize: 18,
-    fontWeight: '500',
+    fontWeight: '600',
     marginTop: 10,
     marginBottom: 5,
     textTransform: 'capitalize',
   },
   title: {
-    fontSize: 24,
-    fontWeight: 'bold',
-    marginBottom: 20,
+    fontSize: 28,
+    fontWeight: '900',
+    marginBottom: 22,
   },
   list: {
     width: '100%',
   },
-  expenseItem: {
-    backgroundColor: '#fff',
-    borderRadius: 8,
-    padding: 16,
-    marginBottom: 12,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.2,
-    shadowRadius: 2,
-    elevation: 2,
+  listContent: {
+    paddingBottom: 112,
   },
-  expenseHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
+  addButton: {
+    position: 'absolute',
+    right: 20,
+    bottom: 28,
+    width: 56,
+    height: 56,
+    borderRadius: 28,
     alignItems: 'center',
-    marginBottom: 8,
-  },
-  expenseDescription: {
-    fontSize: 16,
-    fontWeight: '500',
-  },
-  expenseAmount: {
-    fontSize: 18,
-    fontWeight: 'bold',
-    color: '#e74c3c',
-  },
-  expenseDetails: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-  },
-  expenseCategory: {
-    fontSize: 14,
-    color: '#7f8c8d',
-  },
-  expenseBank: {
-    fontSize: 14,
-    color: '#7f8c8d',
+    justifyContent: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.22,
+    shadowRadius: 14,
+    elevation: 5,
   },
   emptyContainer: {
     flex: 1,
@@ -183,7 +163,6 @@ const styles = StyleSheet.create({
   },
   emptyText: {
     fontSize: 16,
-    color: '#95a5a6',
     textAlign: 'center',
   },
 });
