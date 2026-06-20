@@ -1,14 +1,10 @@
 import React from 'react';
 import FontAwesome from '@expo/vector-icons/FontAwesome';
-import { Link, Tabs } from 'expo-router';
-import { Pressable } from 'react-native';
+import { Tabs } from 'expo-router';
 
-import Colors from '@/constants/Colors';
-import { useColorScheme } from '@/components/useColorScheme';
 import { useClientOnlyValue } from '@/components/useClientOnlyValue';
-import { ThemeModeButton } from '@/components/ThemeModeButton';
+import { useThemeMode } from '@/components/ThemeModeProvider';
 
-// You can explore the built-in icon families and icons on the web at https://icons.expo.fyi/
 function TabBarIcon(props: {
   name: React.ComponentProps<typeof FontAwesome>['name'];
   color: string;
@@ -17,37 +13,25 @@ function TabBarIcon(props: {
 }
 
 export default function TabLayout() {
-  const colorScheme = useColorScheme();
+  const { colors } = useThemeMode();
 
   return (
     <Tabs
       screenOptions={{
-        tabBarActiveTintColor: Colors[colorScheme ?? 'light'].tint,
-        headerShown: useClientOnlyValue(false, true),
-        tabBarStyle: { paddingBottom: 5 },
+        tabBarActiveTintColor: colors.tint,
+        tabBarInactiveTintColor: colors.tabIconDefault,
+        headerShown: useClientOnlyValue(false, false),
+        tabBarStyle: {
+          paddingBottom: 5,
+          backgroundColor: colors.surface,
+          borderTopColor: colors.border,
+        },
       }}>
       <Tabs.Screen
         name="index"
         options={{
           title: 'Accueil',
           tabBarIcon: ({ color }) => <TabBarIcon name="home" color={color} />,
-          headerRight: () => (
-            <>
-              <ThemeModeButton />
-              <Link href="/add-expense" asChild>
-                <Pressable>
-                  {({ pressed }) => (
-                    <FontAwesome
-                      name="plus-circle"
-                      size={25}
-                      color={Colors[colorScheme ?? 'light'].text}
-                      style={{ marginRight: 15, opacity: pressed ? 0.5 : 1 }}
-                    />
-                  )}
-                </Pressable>
-              </Link>
-            </>
-          ),
         }}
       />
       <Tabs.Screen
@@ -55,7 +39,6 @@ export default function TabLayout() {
         options={{
           title: 'Calendrier',
           tabBarIcon: ({ color }) => <TabBarIcon name="calendar" color={color} />,
-          headerRight: () => <ThemeModeButton />,
         }}
       />
       <Tabs.Screen
@@ -63,7 +46,13 @@ export default function TabLayout() {
         options={{
           title: 'Paiements',
           tabBarIcon: ({ color }) => <TabBarIcon name="credit-card" color={color} />,
-          headerRight: () => <ThemeModeButton />,
+        }}
+      />
+      <Tabs.Screen
+        name="settings"
+        options={{
+          title: 'Paramètres',
+          tabBarIcon: ({ color }) => <TabBarIcon name="cog" color={color} />,
         }}
       />
     </Tabs>
