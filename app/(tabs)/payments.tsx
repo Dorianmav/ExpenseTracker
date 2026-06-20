@@ -1,5 +1,5 @@
 import React, { useMemo, useState } from 'react';
-import { ScrollView, StyleSheet, TouchableOpacity } from 'react-native';
+import { ScrollView, StyleSheet, TouchableOpacity, View as NativeView } from 'react-native';
 import { useFocusEffect } from '@react-navigation/native';
 import { router } from 'expo-router';
 import { format, parse } from 'date-fns';
@@ -148,10 +148,10 @@ export default function PaymentsHubScreen() {
   );
 
   return (
-    <ScrollView style={styles.container}>
+    <ScrollView style={styles.container} contentContainerStyle={styles.scrollContent}>
       <Text style={styles.title}>Paiements récurrents</Text>
 
-      <View style={[styles.switchContainer, { backgroundColor: borderColor }]}>
+      <View style={[styles.switchContainer, { backgroundColor: surfaceColor, borderColor }]}>
         <TouchableOpacity
           style={[
             styles.switchButton,
@@ -159,7 +159,12 @@ export default function PaymentsHubScreen() {
           ]}
           onPress={() => setActiveView('subscriptions')}
         >
-          <Text style={activeView === 'subscriptions' ? styles.switchTextActive : styles.switchText}>
+          <Text
+            style={[
+              styles.switchText,
+              { color: activeView === 'subscriptions' ? '#fff' : mutedColor },
+            ]}
+          >
             Abonnements
           </Text>
         </TouchableOpacity>
@@ -170,7 +175,12 @@ export default function PaymentsHubScreen() {
           ]}
           onPress={() => setActiveView('installments')}
         >
-          <Text style={activeView === 'installments' ? styles.switchTextActive : styles.switchText}>
+          <Text
+            style={[
+              styles.switchText,
+              { color: activeView === 'installments' ? '#fff' : mutedColor },
+            ]}
+          >
             Plusieurs fois
           </Text>
         </TouchableOpacity>
@@ -263,6 +273,7 @@ function SummaryTile({ label, value }: { label: string; value: string }) {
 
 function SubscriptionCard({ subscription }: { subscription: Subscription }) {
   const surfaceColor = useThemeColor({}, 'surface');
+  const borderColor = useThemeColor({}, 'border');
   const mutedColor = useThemeColor({}, 'muted');
   const nextOccurrence = getOpenOccurrences(subscription.occurrences)[0];
   const spentAmount = getPaidAmount(subscription.occurrences);
@@ -277,22 +288,23 @@ function SubscriptionCard({ subscription }: { subscription: Subscription }) {
         })
       }
     >
-      <View style={styles.cardHeader}>
+      <NativeView style={styles.cardHeader}>
         <Text style={styles.cardTitle}>{subscription.name}</Text>
         <Text style={styles.cardAmount}>{formatAmount(subscription.amount)}</Text>
-      </View>
+      </NativeView>
       <Text style={[styles.muted, { color: mutedColor }]}>{frequencyLabels[subscription.frequency]}</Text>
       <Text style={styles.cardProgress}>Dépensé jusqu'ici: {formatAmount(spentAmount)}</Text>
-      <View style={styles.cardFooter}>
+      <NativeView style={[styles.cardFooter, { borderTopColor: borderColor }]}>
         <Text style={[styles.cardMeta, { color: mutedColor }]}>{subscription.category?.name ?? 'Catégorie non définie'}</Text>
         <Text style={[styles.cardMeta, { color: mutedColor }]}>Prochaine: {formatApiDate(nextOccurrence?.dueDate)}</Text>
-      </View>
+      </NativeView>
     </TouchableOpacity>
   );
 }
 
 function InstallmentCard({ installment }: { installment: Installment }) {
   const surfaceColor = useThemeColor({}, 'surface');
+  const borderColor = useThemeColor({}, 'border');
   const mutedColor = useThemeColor({}, 'muted');
   const openOccurrences = getOpenOccurrences(installment.occurrences);
   const paidAmount = getPaidAmount(installment.occurrences);
@@ -308,17 +320,22 @@ function InstallmentCard({ installment }: { installment: Installment }) {
         })
       }
     >
-      <View style={styles.cardHeader}>
+      <NativeView style={styles.cardHeader}>
         <Text style={styles.cardTitle}>{installment.name}</Text>
-        <Text style={styles.cardAmount}>{formatAmount(remainingAmount)}</Text>
-      </View>
-      <Text style={[styles.muted, { color: mutedColor }]}>
-        {openOccurrences.length} échéance(s) restante(s) sur {installment.numberOfPayments}
-      </Text>
-      <View style={styles.cardFooter}>
+        <Text style={styles.cardAmount}>{formatAmount(installment.totalAmount)}</Text>
+      </NativeView>
+      <NativeView style={styles.installmentProgressRow}>
+        <Text style={[styles.muted, styles.installmentProgressText, { color: mutedColor }]}>
+          {openOccurrences.length} échéance(s) restante(s) sur {installment.numberOfPayments}
+        </Text>
+        <Text style={[styles.remainingAmount, { color: mutedColor }]}>
+          Reste: {formatAmount(remainingAmount)}
+        </Text>
+      </NativeView>
+      <NativeView style={[styles.cardFooter, { borderTopColor: borderColor }]}>
         <Text style={[styles.cardMeta, { color: mutedColor }]}>{installment.bank?.name ?? 'Banque non définie'}</Text>
         <Text style={[styles.cardMeta, { color: mutedColor }]}>Prochaine: {formatApiDate(openOccurrences[0]?.dueDate)}</Text>
-      </View>
+      </NativeView>
     </TouchableOpacity>
   );
 }
@@ -327,6 +344,10 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     padding: 16,
+    paddingTop: 48,
+  },
+  scrollContent: {
+    paddingBottom: 112,
   },
   title: {
     fontSize: 26,
@@ -337,6 +358,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     backgroundColor: '#ecf0f1',
     borderRadius: 8,
+    borderWidth: 1,
     padding: 4,
     marginBottom: 16,
   },
@@ -350,11 +372,6 @@ const styles = StyleSheet.create({
     backgroundColor: '#3498db',
   },
   switchText: {
-    color: '#2c3e50',
-    fontWeight: '600',
-  },
-  switchTextActive: {
-    color: '#fff',
     fontWeight: '700',
   },
   summaryGrid: {
@@ -377,7 +394,6 @@ const styles = StyleSheet.create({
   summaryValue: {
     fontSize: 20,
     fontWeight: 'bold',
-    color: '#2c3e50',
   },
   summaryLabel: {
     color: '#7f8c8d',
@@ -408,7 +424,6 @@ const styles = StyleSheet.create({
     borderColor: '#3498db',
   },
   filterText: {
-    color: '#2c3e50',
     fontWeight: '500',
   },
   filterTextActive: {
@@ -444,15 +459,29 @@ const styles = StyleSheet.create({
     color: '#e74c3c',
   },
   cardProgress: {
-    color: '#2c3e50',
     fontWeight: '600',
     marginTop: 8,
+  },
+  installmentProgressRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'flex-start',
+    gap: 12,
+  },
+  installmentProgressText: {
+    flex: 1,
+  },
+  remainingAmount: {
+    fontWeight: '700',
+    textAlign: 'right',
   },
   cardFooter: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     gap: 12,
-    marginTop: 10,
+    marginTop: 14,
+    paddingTop: 12,
+    borderTopWidth: 1,
   },
   cardMeta: {
     color: '#7f8c8d',

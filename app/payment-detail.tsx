@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { ScrollView, StyleSheet, TouchableOpacity } from 'react-native';
+import { ScrollView, StyleSheet, TouchableOpacity, View as NativeView } from 'react-native';
 import { useLocalSearchParams } from 'expo-router';
 import { format, parse } from 'date-fns';
 import { fr } from 'date-fns/locale';
@@ -81,7 +81,7 @@ export default function PaymentDetailScreen() {
   const [isLoading, setIsLoading] = useState(true);
   const [updatingOccurrenceId, setUpdatingOccurrenceId] = useState<number | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [refreshKey, setRefreshKey] = useState(0);
+  const [actionError, setActionError] = useState<string | null>(null);
 
   useEffect(() => {
     let isActive = true;
@@ -120,7 +120,7 @@ export default function PaymentDetailScreen() {
     return () => {
       isActive = false;
     };
-  }, [params.id, params.type, refreshKey]);
+  }, [params.id, params.type]);
 
   const occurrences = useMemo(() => {
     if (subscription) return sortOccurrences(subscription.occurrences);
@@ -129,20 +129,60 @@ export default function PaymentDetailScreen() {
   }, [installment, subscription]);
   const openOccurrences = useMemo(() => getOpenOccurrences(occurrences), [occurrences]);
 
+  const replaceLocalOccurrence = (nextOccurrence: PaymentOccurrence) => {
+    if (params.type === 'subscription') {
+      setSubscription((currentSubscription) =>
+        currentSubscription
+          ? {
+              ...currentSubscription,
+              occurrences: (currentSubscription.occurrences ?? []).map((occurrence) =>
+                occurrence.id === nextOccurrence.id ? nextOccurrence : occurrence,
+              ),
+            }
+          : currentSubscription,
+      );
+      return;
+    }
+
+    if (params.type === 'installment') {
+      setInstallment((currentInstallment) =>
+        currentInstallment
+          ? {
+              ...currentInstallment,
+              occurrences: (currentInstallment.occurrences ?? []).map((occurrence) =>
+                occurrence.id === nextOccurrence.id ? nextOccurrence : occurrence,
+              ),
+            }
+          : currentInstallment,
+      );
+    }
+  };
+
   const handleStatusChange = async (occurrenceId: number, status: OccurrenceStatus) => {
     if (params.type !== 'subscription' && params.type !== 'installment') {
       return;
     }
 
+    const previousOccurrence = occurrences.find((occurrence) => occurrence.id === occurrenceId);
+
+    if (!previousOccurrence) {
+      return;
+    }
+
     setUpdatingOccurrenceId(occurrenceId);
-    setError(null);
+    setActionError(null);
+    replaceLocalOccurrence({
+      ...previousOccurrence,
+      status,
+      paidDate: status === 'paid' ? format(new Date(), 'dd/MM/yyyy') : null,
+    });
 
     try {
       await expenseService.updateOccurrenceStatus(params.type, occurrenceId, status);
-      setRefreshKey((currentKey) => currentKey + 1);
     } catch (statusError) {
       console.error(statusError);
-      setError("Impossible de modifier l'état de cette échéance");
+      replaceLocalOccurrence(previousOccurrence);
+      setActionError("Impossible de modifier l'état de cette échéance");
     } finally {
       setUpdatingOccurrenceId(null);
     }
@@ -166,16 +206,16 @@ export default function PaymentDetailScreen() {
 
   if (expense) {
     return (
-      <ScrollView style={styles.container}>
+      <ScrollView style={styles.container} contentContainerStyle={styles.scrollContent}>
         <Text style={styles.title}>{expense.description}</Text>
-        <View style={[styles.section, { backgroundColor: surfaceColor }]}>
+        <NativeView style={[styles.section, { backgroundColor: surfaceColor }]}>
           <InfoRow label="Montant" value={formatAmount(expense.amount)} />
           <InfoRow label="Date" value={format(expense.date, 'dd MMMM yyyy', { locale: fr })} />
           <InfoRow label="Catégorie" value={expense.category} />
           <InfoRow label="Banque" value={expense.bank} />
           <InfoRow label="Type" value="Paiement simple" />
           <InfoRow label="Statut" value="Payé" />
-        </View>
+        </NativeView>
       </ScrollView>
     );
   }
@@ -187,9 +227,9 @@ export default function PaymentDetailScreen() {
       : null;
 
     return (
-      <ScrollView style={styles.container}>
+      <ScrollView style={styles.container} contentContainerStyle={styles.scrollContent}>
         <Text style={styles.title}>{subscription.name}</Text>
-        <View style={[styles.section, { backgroundColor: surfaceColor }]}>
+        <NativeView style={[styles.section, { backgroundColor: surfaceColor }]}>
           <InfoRow label="Type" value="Abonnement" />
           <InfoRow label="Montant par échéance" value={formatAmount(subscription.amount)} />
           <InfoRow label="Fréquence" value={frequencyLabels[subscription.frequency]} />
@@ -203,10 +243,11 @@ export default function PaymentDetailScreen() {
             label="Reste à payer"
             value={remainingAmount === null ? 'Abonnement actif sans fin définie' : formatAmount(remainingAmount)}
           />
-        </View>
+        </NativeView>
         <OccurrencesSection
           occurrences={occurrences}
           title="Échéances"
+          error={actionError}
           updatingOccurrenceId={updatingOccurrenceId}
           onStatusChange={handleStatusChange}
         />
@@ -220,9 +261,9 @@ export default function PaymentDetailScreen() {
     const remainingAmount = Math.max(totalAmount - paidAmount, 0);
 
     return (
-      <ScrollView style={styles.container}>
+      <ScrollView style={styles.container} contentContainerStyle={styles.scrollContent}>
         <Text style={styles.title}>{installment.name}</Text>
-        <View style={[styles.section, { backgroundColor: surfaceColor }]}>
+        <NativeView style={[styles.section, { backgroundColor: surfaceColor }]}>
           <InfoRow label="Type" value="Paiement en plusieurs fois" />
           <InfoRow label="Montant total" value={formatAmount(totalAmount)} />
           <InfoRow label="Déjà payé" value={formatAmount(paidAmount)} />
@@ -232,10 +273,11 @@ export default function PaymentDetailScreen() {
           <InfoRow label="Prochaine échéance" value={formatApiDate(openOccurrences[0]?.dueDate)} />
           <InfoRow label="Catégorie" value={installment.category?.name ?? 'Non définie'} />
           <InfoRow label="Banque" value={installment.bank?.name ?? 'Non définie'} />
-        </View>
+        </NativeView>
         <OccurrencesSection
           occurrences={occurrences}
           title="Échéances"
+          error={actionError}
           updatingOccurrenceId={updatingOccurrenceId}
           onStatusChange={handleStatusChange}
         />
@@ -247,47 +289,51 @@ export default function PaymentDetailScreen() {
 }
 
 function InfoRow({ label, value }: { label: string; value: string }) {
-  const borderColor = useThemeColor({}, 'border');
   const mutedColor = useThemeColor({}, 'muted');
 
   return (
-    <View style={[styles.infoRow, { borderBottomColor: borderColor }]}>
+    <NativeView style={styles.infoRow}>
       <Text style={[styles.infoLabel, { color: mutedColor }]}>{label}</Text>
       <Text style={styles.infoValue}>{value}</Text>
-    </View>
+    </NativeView>
   );
 }
 
 function OccurrencesSection({
   title,
   occurrences,
+  error,
   updatingOccurrenceId,
   onStatusChange,
 }: {
   title: string;
   occurrences: PaymentOccurrence[];
+  error: string | null;
   updatingOccurrenceId: number | null;
   onStatusChange: (occurrenceId: number, status: OccurrenceStatus) => void;
 }) {
   const surfaceColor = useThemeColor({}, 'surface');
-  const borderColor = useThemeColor({}, 'border');
   const mutedColor = useThemeColor({}, 'muted');
 
   return (
-    <View style={[styles.section, { backgroundColor: surfaceColor }]}>
+    <NativeView style={[styles.section, { backgroundColor: surfaceColor }]}>
       <Text style={styles.sectionTitle}>{title}</Text>
+      {error && <Text style={styles.inlineErrorText}>{error}</Text>}
       {occurrences.length > 0 ? (
         occurrences.slice(0, 12).map((occurrence) => (
-          <View key={occurrence.id} style={[styles.occurrenceRow, { borderBottomColor: borderColor }]}>
-            <View style={styles.occurrenceContent}>
-              <View style={styles.occurrenceHeader}>
-                <View>
+          <NativeView
+            key={occurrence.id}
+            style={styles.occurrenceRow}
+          >
+            <NativeView style={styles.occurrenceContent}>
+              <NativeView style={styles.occurrenceHeader}>
+                <NativeView>
                   <Text style={styles.occurrenceDate}>{formatApiDate(occurrence.dueDate)}</Text>
                   <Text style={[styles.muted, { color: mutedColor }]}>{statusLabels[occurrence.status] ?? occurrence.status}</Text>
-                </View>
+                </NativeView>
                 <Text style={styles.occurrenceAmount}>{formatAmount(occurrence.amount)}</Text>
-              </View>
-              <View style={styles.statusActions}>
+              </NativeView>
+              <NativeView style={styles.statusActions}>
                 <StatusButton
                   label="Payé"
                   active={occurrence.status === 'paid'}
@@ -306,14 +352,14 @@ function OccurrencesSection({
                   disabled={updatingOccurrenceId === occurrence.id}
                   onPress={() => onStatusChange(occurrence.id, 'pending')}
                 />
-              </View>
-            </View>
-          </View>
+              </NativeView>
+            </NativeView>
+          </NativeView>
         ))
       ) : (
         <Text style={styles.muted}>Aucune échéance à venir</Text>
       )}
-    </View>
+    </NativeView>
   );
 }
 
@@ -351,6 +397,10 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     padding: 16,
+    paddingTop: 48,
+  },
+  scrollContent: {
+    paddingBottom: 112,
   },
   centered: {
     flex: 1,
@@ -383,9 +433,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     gap: 16,
-    paddingVertical: 8,
-    borderBottomWidth: 1,
-    borderBottomColor: '#ecf0f1',
+    paddingVertical: 10,
   },
   infoLabel: {
     color: '#7f8c8d',
@@ -397,9 +445,7 @@ const styles = StyleSheet.create({
     textAlign: 'right',
   },
   occurrenceRow: {
-    paddingVertical: 10,
-    borderBottomWidth: 1,
-    borderBottomColor: '#ecf0f1',
+    paddingVertical: 12,
   },
   occurrenceContent: {
     gap: 10,
@@ -438,7 +484,6 @@ const styles = StyleSheet.create({
     opacity: 0.6,
   },
   statusButtonText: {
-    color: '#2c3e50',
     fontWeight: '600',
   },
   statusButtonTextActive: {
@@ -451,5 +496,10 @@ const styles = StyleSheet.create({
   errorText: {
     color: '#e74c3c',
     textAlign: 'center',
+  },
+  inlineErrorText: {
+    color: '#e74c3c',
+    fontWeight: '600',
+    marginBottom: 12,
   },
 });
