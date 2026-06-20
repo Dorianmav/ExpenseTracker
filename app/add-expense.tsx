@@ -1,232 +1,239 @@
-import React, { useState } from 'react';
-import { StyleSheet, TouchableOpacity, TextInput, ScrollView, Switch } from 'react-native';
-import { Text, View } from '@/components/Themed';
+import React, { useEffect, useState } from 'react';
+import { Alert, StyleSheet, TouchableOpacity, TextInput, ScrollView } from 'react-native';
+import { Text, View, useThemeColor } from '@/components/Themed';
 import { router } from 'expo-router';
 import FontAwesome from '@expo/vector-icons/FontAwesome';
 import DateTimePicker from '@react-native-community/datetimepicker';
 import { format } from 'date-fns';
 import { fr } from 'date-fns/locale';
-import { expenseService } from '@/services/expenseService';
-
-// Types de paiement
-type PaymentType = 'simple' | 'subscription' | 'installment';
-
-// Données temporaires pour les catégories
-const TEMP_CATEGORIES = [
-  { id: '1', name: 'Alimentation', parentId: null },
-  { id: '2', name: 'Transport', parentId: null },
-  { id: '3', name: 'Loisirs', parentId: null },
-  { id: '4', name: 'Restaurant', parentId: '1' },
-  { id: '5', name: 'Fast Food', parentId: '1' },
-  { id: '6', name: 'Train', parentId: '2' },
-  { id: '7', name: 'Voiture', parentId: '2' },
-  { id: '8', name: 'Sport', parentId: '3' },
-  { id: '9', name: 'Manga', parentId: '3' },
-  { id: '10', name: 'Soirée', parentId: '3' },
-];
-
-// Données temporaires pour les banques
-const TEMP_BANKS = [
-  { id: '1', name: 'BNP' },
-  { id: '2', name: 'Société Générale' },
-  { id: '3', name: 'Boursorama' },
-];
+import { Bank, Category, expenseService, PaymentType } from '@/services/expenseService';
 
 export default function AddExpenseScreen() {
+  const cardColor = useThemeColor({}, 'card');
+  const borderColor = useThemeColor({}, 'border');
+  const textColor = useThemeColor({}, 'text');
+  const mutedColor = useThemeColor({}, 'muted');
+  const primaryColor = useThemeColor({}, 'primary');
+  const successColor = useThemeColor({}, 'success');
+  const inputStyle = [styles.input, { backgroundColor: cardColor, borderColor, color: textColor }];
+  const dateButtonStyle = [styles.dateButton, { backgroundColor: cardColor, borderColor }];
+  const inactivePillStyle = { backgroundColor: cardColor, borderColor };
+  const activePrimaryPillStyle = { backgroundColor: primaryColor, borderColor: primaryColor };
+  const activeSuccessPillStyle = { backgroundColor: successColor, borderColor: successColor };
   const [amount, setAmount] = useState('');
   const [description, setDescription] = useState('');
   const [date, setDate] = useState(new Date());
   const [showDatePicker, setShowDatePicker] = useState(false);
-  
-  const [selectedCategory, setSelectedCategory] = useState('');
-  const [selectedBank, setSelectedBank] = useState('');
+
+  const [categories, setCategories] = useState<Category[]>([]);
+  const [banks, setBanks] = useState<Bank[]>([]);
+  const [selectedMainCategory, setSelectedMainCategory] = useState<number | null>(null);
+  const [selectedCategory, setSelectedCategory] = useState<number | null>(null);
+  const [selectedBank, setSelectedBank] = useState<number | null>(null);
   const [paymentType, setPaymentType] = useState<PaymentType>('simple');
-  
-  // États spécifiques aux abonnements
-  const [frequency, setFrequency] = useState('monthly');
+
+  const [frequency, setFrequency] = useState<'weekly' | 'monthly' | 'yearly'>('monthly');
   const [endDate, setEndDate] = useState<Date | null>(null);
   const [showEndDatePicker, setShowEndDatePicker] = useState(false);
-  
-  // États spécifiques aux paiements en plusieurs fois
+
   const [totalAmount, setTotalAmount] = useState('');
   const [numberOfPayments, setNumberOfPayments] = useState('');
   const [installmentDates, setInstallmentDates] = useState<Date[]>([]);
   const [showInstallmentDatePicker, setShowInstallmentDatePicker] = useState(false);
   const [currentInstallmentIndex, setCurrentInstallmentIndex] = useState(0);
-  
-  const handleSave = () => {
-    // Trouver la catégorie et la banque sélectionnées
-    const selectedCategoryObj = TEMP_CATEGORIES.find(cat => cat.id === selectedCategory);
-    const selectedBankObj = TEMP_BANKS.find(bank => bank.id === selectedBank);
-    
-    if (!selectedCategoryObj || !selectedBankObj || !amount) {
-      // Normalement, on afficherait une erreur à l'utilisateur
-      console.error('Veuillez remplir tous les champs obligatoires');
+
+  const [isLoadingOptions, setIsLoadingOptions] = useState(true);
+  const [isSaving, setIsSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    let isActive = true;
+
+    const loadOptions = async () => {
+      setIsLoadingOptions(true);
+      setError(null);
+
+      try {
+        const [apiCategories, apiBanks] = await Promise.all([
+          expenseService.getCategories(),
+          expenseService.getBanks(),
+        ]);
+
+        if (!isActive) return;
+
+        setCategories(apiCategories);
+        setBanks(apiBanks);
+
+        const firstMainCategory = apiCategories.find((category) => category.parentId === null);
+        setSelectedMainCategory(firstMainCategory?.id ?? apiCategories[0]?.id ?? null);
+        setSelectedCategory(firstMainCategory?.id ?? apiCategories[0]?.id ?? null);
+        setSelectedBank(apiBanks[0]?.id ?? null);
+      } catch (loadError) {
+        console.error(loadError);
+        if (isActive) setError('Impossible de charger les catégories et banques');
+      } finally {
+        if (isActive) setIsLoadingOptions(false);
+      }
+    };
+
+    loadOptions();
+
+    return () => {
+      isActive = false;
+    };
+  }, []);
+
+  const handleSave = async () => {
+    const parsedAmount = Number.parseFloat(amount.replace(',', '.'));
+    const parsedTotalAmount = Number.parseFloat(totalAmount.replace(',', '.'));
+    const parsedNumberOfPayments = Number.parseInt(numberOfPayments, 10);
+
+    if (!selectedCategory || !selectedBank || !description.trim() || Number.isNaN(parsedAmount)) {
+      Alert.alert('Champs manquants', 'Renseignez au moins un montant, une description, une catégorie et une banque.');
       return;
     }
-    
-    // Créer l'objet dépense
-    const newExpense = {
-      amount: parseFloat(amount),
-      description,
-      date,
-      category: selectedCategoryObj.name,
-      bank: selectedBankObj.name,
-      type: paymentType,
-      // Données spécifiques selon le type
-      ...(paymentType === 'subscription' && {
-        frequency,
-        endDate,
-      }),
-      ...(paymentType === 'installment' && {
-        totalAmount: parseFloat(totalAmount || '0'),
-        numberOfPayments: parseInt(numberOfPayments || '0'),
-        installmentDates: installmentDates,
-      }),
-    };
-    
-    // Ajouter la dépense via le service
-    expenseService.addExpense(newExpense);
-    
-    console.log('Dépense ajoutée:', newExpense);
-    
-    // Retourner à l'écran précédent
-    router.back();
+
+    if (paymentType === 'installment' && (Number.isNaN(parsedNumberOfPayments) || parsedNumberOfPayments < 1)) {
+      Alert.alert('Paiement échelonné', 'Renseignez un nombre de paiements valide.');
+      return;
+    }
+
+    setIsSaving(true);
+    setError(null);
+
+    try {
+      await expenseService.addExpense({
+        amount: parsedAmount,
+        description: description.trim(),
+        date,
+        categoryId: selectedCategory,
+        bankId: selectedBank,
+        type: paymentType,
+        ...(paymentType === 'subscription' && {
+          frequency,
+          endDate,
+        }),
+        ...(paymentType === 'installment' && {
+          totalAmount: Number.isNaN(parsedTotalAmount) ? parsedAmount : parsedTotalAmount,
+          numberOfPayments: parsedNumberOfPayments,
+          installmentDates,
+        }),
+      });
+
+      router.back();
+    } catch (saveError) {
+      console.error(saveError);
+      setError("Impossible d'enregistrer la dépense");
+    } finally {
+      setIsSaving(false);
+    }
   };
-  
-  const onDateChange = (_event: any, selectedDate: Date | undefined) => {
-    const currentDate = selectedDate || date;
+
+  const onDateChange = (_event: unknown, selectedDate: Date | undefined) => {
     setShowDatePicker(false);
-    setDate(currentDate);
+    setDate(selectedDate || date);
   };
-  
-  const onEndDateChange = (_event: any, selectedDate: Date | undefined) => {
-    const currentDate = selectedDate || endDate;
+
+  const onEndDateChange = (_event: unknown, selectedDate: Date | undefined) => {
     setShowEndDatePicker(false);
-    setEndDate(currentDate);
+    setEndDate(selectedDate || endDate);
   };
-  
-  const onInstallmentDateChange = (_event: any, selectedDate: Date | undefined) => {
+
+  const onInstallmentDateChange = (_event: unknown, selectedDate: Date | undefined) => {
     const currentDate = selectedDate || new Date();
     setShowInstallmentDatePicker(false);
-    
-    // Mettre à jour la date du paiement échelonné actuel
+
     const newDates = [...installmentDates];
     newDates[currentInstallmentIndex] = currentDate;
     setInstallmentDates(newDates);
   };
-  
-  // Générer les champs de dates pour les paiements échelonnés
+
   const updateInstallmentDates = (count: string) => {
-    const num = parseInt(count);
-    if (isNaN(num) || num <= 0) {
+    const num = Number.parseInt(count, 10);
+
+    if (Number.isNaN(num) || num <= 0) {
       setInstallmentDates([]);
       return;
     }
-    
-    // Créer un tableau avec le nombre de dates nécessaires
+
     const dates: Date[] = [];
-    const today = new Date();
-    
-    // Première date = aujourd'hui
-    dates.push(today);
-    
-    // Générer des dates par défaut pour les autres paiements (mensuels)
-    for (let i = 1; i < num; i++) {
-      const nextDate = new Date(today);
-      nextDate.setMonth(today.getMonth() + i);
+
+    for (let i = 0; i < num; i += 1) {
+      const nextDate = new Date(date);
+      nextDate.setMonth(date.getMonth() + i);
       dates.push(nextDate);
     }
-    
+
     setInstallmentDates(dates);
   };
-  
-  // Filtrer les catégories principales (sans parent)
-  const mainCategories = TEMP_CATEGORIES.filter(cat => cat.parentId === null);
-  
-  // Filtrer les sous-catégories si une catégorie principale est sélectionnée
-  const subCategories = TEMP_CATEGORIES.filter(cat => cat.parentId === selectedCategory);
+
+  const mainCategories = categories.filter((category) => category.parentId === null);
+  const subCategories = categories.filter((category) => category.parentId === selectedMainCategory);
 
   return (
     <ScrollView style={styles.container}>
       <Text style={styles.title}>Ajouter une dépense</Text>
-      
-      {/* Montant */}
+
+      {error && <Text style={styles.errorText}>{error}</Text>}
+      {isLoadingOptions && <Text style={styles.loadingText}>Chargement...</Text>}
+
       <View style={styles.inputContainer}>
         <Text style={styles.label}>Montant</Text>
         <TextInput
-          style={styles.input}
+          style={inputStyle}
+          placeholderTextColor={mutedColor}
           value={amount}
           onChangeText={setAmount}
           placeholder="0.00"
           keyboardType="numeric"
         />
       </View>
-      
-      {/* Description */}
+
       <View style={styles.inputContainer}>
         <Text style={styles.label}>Description</Text>
         <TextInput
-          style={styles.input}
+          style={inputStyle}
+          placeholderTextColor={mutedColor}
           value={description}
           onChangeText={setDescription}
           placeholder="Description de la dépense"
         />
       </View>
-      
-      {/* Date */}
+
       <View style={styles.inputContainer}>
         <Text style={styles.label}>Date</Text>
-        <TouchableOpacity 
-          style={styles.dateButton}
-          onPress={() => setShowDatePicker(true)}
-        >
+        <TouchableOpacity style={dateButtonStyle} onPress={() => setShowDatePicker(true)}>
           <Text>{format(date, 'dd/MM/yyyy', { locale: fr })}</Text>
-          <FontAwesome name="calendar" size={20} color="#3498db" />
+          <FontAwesome name="calendar" size={20} color={primaryColor} />
         </TouchableOpacity>
         {showDatePicker && (
-          <DateTimePicker
-            value={date}
-            mode="date"
-            display="default"
-            onChange={onDateChange}
-          />
+          <DateTimePicker value={date} mode="date" display="default" onChange={onDateChange} />
         )}
       </View>
-      
-      {/* Type de paiement */}
+
       <View style={styles.inputContainer}>
         <Text style={styles.label}>Type de paiement</Text>
         <View style={styles.paymentTypeContainer}>
           <TouchableOpacity
-            style={[
-              styles.paymentTypeButton,
-              paymentType === 'simple' && styles.paymentTypeButtonActive
-            ]}
+            style={[styles.paymentTypeButton, inactivePillStyle, paymentType === 'simple' && activePrimaryPillStyle]}
             onPress={() => setPaymentType('simple')}
           >
             <Text style={paymentType === 'simple' ? styles.paymentTypeTextActive : styles.paymentTypeText}>
               Simple
             </Text>
           </TouchableOpacity>
-          
+
           <TouchableOpacity
-            style={[
-              styles.paymentTypeButton,
-              paymentType === 'subscription' && styles.paymentTypeButtonActive
-            ]}
+            style={[styles.paymentTypeButton, inactivePillStyle, paymentType === 'subscription' && activePrimaryPillStyle]}
             onPress={() => setPaymentType('subscription')}
           >
             <Text style={paymentType === 'subscription' ? styles.paymentTypeTextActive : styles.paymentTypeText}>
               Abonnement
             </Text>
           </TouchableOpacity>
-          
+
           <TouchableOpacity
-            style={[
-              styles.paymentTypeButton,
-              paymentType === 'installment' && styles.paymentTypeButtonActive
-            ]}
+            style={[styles.paymentTypeButton, inactivePillStyle, paymentType === 'installment' && activePrimaryPillStyle]}
             onPress={() => setPaymentType('installment')}
           >
             <Text style={paymentType === 'installment' ? styles.paymentTypeTextActive : styles.paymentTypeText}>
@@ -235,59 +242,35 @@ export default function AddExpenseScreen() {
           </TouchableOpacity>
         </View>
       </View>
-      
-      {/* Champs spécifiques aux abonnements */}
+
       {paymentType === 'subscription' && (
         <>
           <View style={styles.inputContainer}>
             <Text style={styles.label}>Fréquence</Text>
             <View style={styles.paymentTypeContainer}>
-              <TouchableOpacity
-                style={[
-                  styles.frequencyButton,
-                  frequency === 'monthly' && styles.paymentTypeButtonActive
-                ]}
-                onPress={() => setFrequency('monthly')}
-              >
-                <Text style={frequency === 'monthly' ? styles.paymentTypeTextActive : styles.paymentTypeText}>
-                  Mensuel
-                </Text>
-              </TouchableOpacity>
-              
-              <TouchableOpacity
-                style={[
-                  styles.frequencyButton,
-                  frequency === 'yearly' && styles.paymentTypeButtonActive
-                ]}
-                onPress={() => setFrequency('yearly')}
-              >
-                <Text style={frequency === 'yearly' ? styles.paymentTypeTextActive : styles.paymentTypeText}>
-                  Annuel
-                </Text>
-              </TouchableOpacity>
-              
-              <TouchableOpacity
-                style={[
-                  styles.frequencyButton,
-                  frequency === 'weekly' && styles.paymentTypeButtonActive
-                ]}
-                onPress={() => setFrequency('weekly')}
-              >
-                <Text style={frequency === 'weekly' ? styles.paymentTypeTextActive : styles.paymentTypeText}>
-                  Hebdo
-                </Text>
-              </TouchableOpacity>
+              {[
+                ['monthly', 'Mensuel'],
+                ['yearly', 'Annuel'],
+                ['weekly', 'Hebdo'],
+              ].map(([value, label]) => (
+                <TouchableOpacity
+                  key={value}
+                  style={[styles.frequencyButton, inactivePillStyle, frequency === value && activePrimaryPillStyle]}
+                  onPress={() => setFrequency(value as typeof frequency)}
+                >
+                  <Text style={frequency === value ? styles.paymentTypeTextActive : styles.paymentTypeText}>
+                    {label}
+                  </Text>
+                </TouchableOpacity>
+              ))}
             </View>
           </View>
-          
+
           <View style={styles.inputContainer}>
             <Text style={styles.label}>Date de fin (optionnelle)</Text>
-            <TouchableOpacity 
-              style={styles.dateButton}
-              onPress={() => setShowEndDatePicker(true)}
-            >
+            <TouchableOpacity style={dateButtonStyle} onPress={() => setShowEndDatePicker(true)}>
               <Text>{endDate ? format(endDate, 'dd/MM/yyyy', { locale: fr }) : 'Non définie'}</Text>
-              <FontAwesome name="calendar" size={20} color="#3498db" />
+              <FontAwesome name="calendar" size={20} color={primaryColor} />
             </TouchableOpacity>
             {showEndDatePicker && (
               <DateTimePicker
@@ -300,25 +283,26 @@ export default function AddExpenseScreen() {
           </View>
         </>
       )}
-      
-      {/* Champs spécifiques aux paiements en plusieurs fois */}
+
       {paymentType === 'installment' && (
         <>
           <View style={styles.inputContainer}>
             <Text style={styles.label}>Montant total</Text>
             <TextInput
-              style={styles.input}
+              style={inputStyle}
+              placeholderTextColor={mutedColor}
               value={totalAmount}
               onChangeText={setTotalAmount}
-              placeholder="0.00"
+              placeholder={amount || '0.00'}
               keyboardType="numeric"
             />
           </View>
-          
+
           <View style={styles.inputContainer}>
             <Text style={styles.label}>Nombre de paiements</Text>
             <TextInput
-              style={styles.input}
+              style={inputStyle}
+              placeholderTextColor={mutedColor}
               value={numberOfPayments}
               onChangeText={(value) => {
                 setNumberOfPayments(value);
@@ -328,21 +312,23 @@ export default function AddExpenseScreen() {
               keyboardType="numeric"
             />
           </View>
-          
+
           {installmentDates.length > 0 && (
             <View style={styles.inputContainer}>
               <Text style={styles.label}>Dates des paiements</Text>
-              {installmentDates.map((date, index) => (
-                <TouchableOpacity 
-                  key={index}
-                  style={styles.dateButton}
+              {installmentDates.map((installmentDate, index) => (
+                <TouchableOpacity
+                  key={`${installmentDate.toISOString()}-${index}`}
+                  style={dateButtonStyle}
                   onPress={() => {
                     setCurrentInstallmentIndex(index);
                     setShowInstallmentDatePicker(true);
                   }}
                 >
-                  <Text>Paiement {index + 1}: {format(date, 'dd/MM/yyyy', { locale: fr })}</Text>
-                  <FontAwesome name="calendar" size={20} color="#3498db" />
+                  <Text>
+                    Paiement {index + 1}: {format(installmentDate, 'dd/MM/yyyy', { locale: fr })}
+                  </Text>
+                  <FontAwesome name="calendar" size={20} color={primaryColor} />
                 </TouchableOpacity>
               ))}
               {showInstallmentDatePicker && (
@@ -357,36 +343,39 @@ export default function AddExpenseScreen() {
           )}
         </>
       )}
-      
-      {/* Catégorie */}
+
       <View style={styles.inputContainer}>
         <Text style={styles.label}>Catégorie</Text>
         <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.categoriesContainer}>
-          {mainCategories.map(category => (
+          {mainCategories.map((category) => (
             <TouchableOpacity
               key={category.id}
               style={[
                 styles.categoryButton,
-                selectedCategory === category.id && styles.categoryButtonActive
+                inactivePillStyle,
+                selectedMainCategory === category.id && activePrimaryPillStyle,
               ]}
-              onPress={() => setSelectedCategory(category.id)}
+              onPress={() => {
+                setSelectedMainCategory(category.id);
+                setSelectedCategory(category.id);
+              }}
             >
-              <Text style={selectedCategory === category.id ? styles.categoryTextActive : styles.categoryText}>
+              <Text style={selectedMainCategory === category.id ? styles.categoryTextActive : styles.categoryText}>
                 {category.name}
               </Text>
             </TouchableOpacity>
           ))}
         </ScrollView>
-        
-        {/* Sous-catégories */}
+
         {subCategories.length > 0 && (
           <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.subCategoriesContainer}>
-            {subCategories.map(subCategory => (
+            {subCategories.map((subCategory) => (
               <TouchableOpacity
                 key={subCategory.id}
                 style={[
                   styles.subCategoryButton,
-                  selectedCategory === subCategory.id && styles.categoryButtonActive
+                  inactivePillStyle,
+                  selectedCategory === subCategory.id && activePrimaryPillStyle,
                 ]}
                 onPress={() => setSelectedCategory(subCategory.id)}
               >
@@ -398,31 +387,36 @@ export default function AddExpenseScreen() {
           </ScrollView>
         )}
       </View>
-      
-      {/* Banque */}
+
       <View style={styles.inputContainer}>
         <Text style={styles.label}>Banque</Text>
         <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.categoriesContainer}>
-          {TEMP_BANKS.map(bank => (
+          {banks.map((bank) => (
             <TouchableOpacity
               key={bank.id}
               style={[
                 styles.bankButton,
-                selectedBank === bank.id && styles.bankButtonActive
+                inactivePillStyle,
+                selectedBank === bank.id && activeSuccessPillStyle,
               ]}
               onPress={() => setSelectedBank(bank.id)}
             >
-              <Text style={selectedBank === bank.id ? styles.bankTextActive : styles.bankText}>
-                {bank.name}
-              </Text>
+              <Text style={selectedBank === bank.id ? styles.bankTextActive : styles.bankText}>{bank.name}</Text>
             </TouchableOpacity>
           ))}
         </ScrollView>
       </View>
-      
-      {/* Bouton de sauvegarde */}
-      <TouchableOpacity style={styles.saveButton} onPress={handleSave}>
-        <Text style={styles.saveButtonText}>Enregistrer</Text>
+
+      <TouchableOpacity
+        style={[
+          styles.saveButton,
+          { backgroundColor: primaryColor },
+          (isSaving || isLoadingOptions) && styles.saveButtonDisabled,
+        ]}
+        onPress={handleSave}
+        disabled={isSaving || isLoadingOptions}
+      >
+        <Text style={styles.saveButtonText}>{isSaving ? 'Enregistrement...' : 'Enregistrer'}</Text>
       </TouchableOpacity>
     </ScrollView>
   );
@@ -432,11 +426,21 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     padding: 16,
+    paddingTop: 48,
   },
   title: {
     fontSize: 24,
     fontWeight: 'bold',
     marginBottom: 20,
+  },
+  loadingText: {
+    marginBottom: 12,
+    color: '#7f8c8d',
+  },
+  errorText: {
+    marginBottom: 12,
+    color: '#e74c3c',
+    fontWeight: '500',
   },
   inputContainer: {
     marginBottom: 16,
@@ -461,6 +465,7 @@ const styles = StyleSheet.create({
     borderColor: '#ddd',
     borderRadius: 8,
     padding: 12,
+    marginBottom: 8,
   },
   paymentTypeContainer: {
     flexDirection: 'row',
@@ -480,7 +485,6 @@ const styles = StyleSheet.create({
     borderColor: '#3498db',
   },
   paymentTypeText: {
-    color: '#333',
   },
   paymentTypeTextActive: {
     color: 'white',
@@ -513,7 +517,6 @@ const styles = StyleSheet.create({
     borderColor: '#3498db',
   },
   categoryText: {
-    color: '#333',
   },
   categoryTextActive: {
     color: 'white',
@@ -546,7 +549,6 @@ const styles = StyleSheet.create({
     borderColor: '#2ecc71',
   },
   bankText: {
-    color: '#333',
   },
   bankTextActive: {
     color: 'white',
@@ -559,6 +561,9 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     marginTop: 20,
     marginBottom: 40,
+  },
+  saveButtonDisabled: {
+    opacity: 0.6,
   },
   saveButtonText: {
     color: 'white',

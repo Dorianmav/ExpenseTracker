@@ -1,6 +1,54 @@
-import { format } from 'date-fns';
+import { format, parse } from 'date-fns';
+import { API_BASE_URL } from './apiConfig';
+import { authService } from './authService';
 
-// Types
+export type PaymentType = 'simple' | 'subscription' | 'installment';
+
+export type Category = {
+  id: number;
+  name: string;
+  parentId: number | null;
+};
+
+export type Bank = {
+  id: number;
+  name: string;
+};
+
+type ApiRelation = {
+  id: number;
+  name: string;
+};
+
+type ApiExpense = {
+  id: number;
+  amount: number | string;
+  description: string;
+  date: string;
+  type: PaymentType;
+  categoryId: number;
+  bankId: number;
+  category?: ApiRelation | null;
+  bank?: ApiRelation | null;
+  occurrenceId?: number | null;
+};
+
+type CalendarProjectionItem = {
+  id: number;
+  kind: 'subscription' | 'installment';
+  ownerId: number;
+  ownerName: string;
+  dueDate: string;
+  paidDate: string | null;
+  expenseId: number | null;
+  status: 'pending' | 'paid' | 'skipped' | 'late';
+  amount: number | string;
+  categoryId: number | null;
+  categoryName: string | null;
+  bankId: number | null;
+  bankName: string | null;
+};
+
 export type Expense = {
   id: string;
   amount: number;
@@ -8,199 +56,257 @@ export type Expense = {
   category: string;
   bank: string;
   date: Date;
-  type: 'simple' | 'subscription' | 'installment';
-  subscriptionId?: string;
-  installmentId?: string;
+  type: PaymentType;
+  categoryId: number;
+  bankId: number;
+  occurrenceId?: number | null;
 };
 
 export type PaymentEvent = {
   id: string;
-  date: string; // Format: 'YYYY-MM-DD'
+  date: string;
   amount: number;
   description: string;
   type: 'subscription' | 'installment';
   category: string;
   bank: string;
+  status: CalendarProjectionItem['status'];
+  ownerId: number;
+  expenseId: number | null;
 };
 
-// Données temporaires pour les dépenses
-let expenses: Expense[] = [
-  { id: '1', amount: 15.99, description: 'Repas du midi', category: 'Alimentation', bank: 'BNP', date: new Date(), type: 'simple' },
-  { id: '2', amount: 35.50, description: 'Essence', category: 'Transport', bank: 'Société Générale', date: new Date(), type: 'simple' },
-  { id: '3', amount: 9.99, description: 'Abonnement Netflix', category: 'Loisirs', bank: 'Boursorama', date: new Date(), type: 'subscription' },
-];
+export type OccurrenceStatus = 'pending' | 'paid' | 'skipped' | 'late';
 
-// Données temporaires pour les paiements à venir
-let upcomingPayments: PaymentEvent[] = [
-  { 
-    id: '1', 
-    date: '2025-09-20', 
-    amount: 9.99, 
-    description: 'Netflix', 
-    type: 'subscription',
-    category: 'Loisirs',
-    bank: 'Boursorama'
-  },
-  { 
-    id: '2', 
-    date: '2025-09-25', 
-    amount: 150.00, 
-    description: 'Loyer', 
-    type: 'subscription',
-    category: 'Logement',
-    bank: 'BNP'
-  },
-  { 
-    id: '3', 
-    date: '2025-09-30', 
-    amount: 50.00, 
-    description: 'Téléphone (2/12)', 
-    type: 'installment',
-    category: 'Tech',
-    bank: 'Société Générale'
-  },
-  { 
-    id: '4', 
-    date: '2025-10-05', 
-    amount: 19.99, 
-    description: 'Salle de sport', 
-    type: 'subscription',
-    category: 'Sport',
-    bank: 'BNP'
-  },
-];
+export type PaymentOccurrence = {
+  id: number;
+  dueDate: string;
+  paidDate?: string | null;
+  status: OccurrenceStatus;
+  amount: number | string;
+  expenseId?: number | null;
+  occurrenceNumber?: number;
+};
 
-// Service pour gérer les dépenses
-export const expenseService = {
-  // Récupérer toutes les dépenses
-  getAllExpenses: (): Expense[] => {
-    return [...expenses];
-  },
-  
-  // Récupérer les dépenses du jour
-  getTodayExpenses: (): Expense[] => {
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
-    
-    return expenses.filter(expense => {
-      const expenseDate = new Date(expense.date);
-      expenseDate.setHours(0, 0, 0, 0);
-      return expenseDate.getTime() === today.getTime();
-    });
-  },
-  
-  // Récupérer tous les paiements à venir
-  getAllUpcomingPayments: (): PaymentEvent[] => {
-    return [...upcomingPayments];
-  },
-  
-  // Récupérer les paiements pour une date spécifique
-  getPaymentsForDate: (date: string): PaymentEvent[] => {
-    return upcomingPayments.filter(payment => payment.date === date);
-  },
-  
-  // Ajouter une nouvelle dépense
-  addExpense: (expense: Omit<Expense, 'id'>): Expense => {
-    const newId = (expenses.length + 1).toString();
-    const newExpense = { ...expense, id: newId };
-    expenses = [newExpense, ...expenses];
-    
-    // Si c'est un abonnement ou un paiement en plusieurs fois, ajouter aux paiements à venir
-    if (expense.type === 'subscription' || expense.type === 'installment') {
-      expenseService.addUpcomingPayment(expense);
+export type SubscriptionFrequency = 'weekly' | 'biweekly' | 'monthly' | 'quarterly' | 'yearly';
+
+export type Subscription = {
+  id: number;
+  name: string;
+  amount: number | string;
+  frequency: SubscriptionFrequency;
+  dayOfMonth: number | null;
+  dayOfWeek: number | null;
+  startDate: string;
+  endDate: string | null;
+  isActive: boolean;
+  categoryId: number | null;
+  bankId: number | null;
+  category?: ApiRelation | null;
+  bank?: ApiRelation | null;
+  occurrences?: PaymentOccurrence[];
+};
+
+export type Installment = {
+  id: number;
+  name: string;
+  totalAmount: number | string;
+  numberOfPayments: number;
+  startDate: string;
+  nextPaymentDate: string | null;
+  customPaymentDates?: string[] | null;
+  isCompleted: boolean;
+  categoryId: number | null;
+  bankId: number | null;
+  category?: ApiRelation | null;
+  bank?: ApiRelation | null;
+  occurrences?: PaymentOccurrence[];
+};
+
+export type CreateExpenseInput = {
+  amount: number;
+  description: string;
+  date: Date;
+  categoryId: number;
+  bankId: number;
+  type: PaymentType;
+  frequency?: 'weekly' | 'monthly' | 'quarterly' | 'yearly';
+  endDate?: Date | null;
+  totalAmount?: number;
+  numberOfPayments?: number;
+  installmentDates?: Date[];
+};
+
+const toFrenchDate = (date: Date) => format(date, 'dd/MM/yyyy');
+const toCalendarDate = (date: string) => format(parse(date, 'dd/MM/yyyy', new Date()), 'yyyy-MM-dd');
+
+async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
+  const token = authService.getAccessToken();
+
+  const response = await fetch(`${API_BASE_URL}${path}`, {
+    ...options,
+    headers: {
+      Accept: 'application/json',
+      'Content-Type': 'application/json',
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      ...options.headers,
+    },
+  });
+
+  if (!response.ok) {
+    if (response.status === 401) {
+      authService.logout();
     }
-    
-    return newExpense;
-  },
-  
-  // Ajouter un paiement à venir
-  addUpcomingPayment: (expense: Omit<Expense, 'id'>) => {
-    let newPayments: PaymentEvent[] = [];
-    
-    if (expense.type === 'subscription') {
-      // Pour les abonnements, ajouter plusieurs paiements selon la fréquence
-      const frequency = (expense as any).frequency || 'monthly';
-      const startDate = expense.date;
-      const endDate = (expense as any).endDate;
-      
-      // Déterminer combien de paiements générer (max 12 si pas de date de fin)
-      const maxPayments = 12;
-      let currentDate = new Date(startDate);
-      let paymentCount = 0;
-      
-      while (paymentCount < maxPayments && (!endDate || currentDate <= endDate)) {
-        const paymentId = (upcomingPayments.length + newPayments.length + 1).toString();
-        const paymentDate = format(currentDate, 'yyyy-MM-dd');
-        
-        newPayments.push({
-          id: paymentId,
-          date: paymentDate,
-          amount: expense.amount,
-          description: expense.description,
-          type: 'subscription',
-          category: expense.category,
-          bank: expense.bank
-        });
-        
-        // Avancer à la prochaine date selon la fréquence
-        if (frequency === 'monthly') {
-          currentDate.setMonth(currentDate.getMonth() + 1);
-        } else if (frequency === 'yearly') {
-          currentDate.setFullYear(currentDate.getFullYear() + 1);
-        } else if (frequency === 'weekly') {
-          currentDate.setDate(currentDate.getDate() + 7);
-        }
-        
-        paymentCount++;
-      }
-    } 
-    else if (expense.type === 'installment') {
-      // Pour les paiements en plusieurs fois, ajouter tous les paiements
-      const numberOfPayments = (expense as any).numberOfPayments || 1;
-      const installmentDates = (expense as any).installmentDates || [];
-      
-      // Si des dates spécifiques ont été fournies, les utiliser
-      if (installmentDates && installmentDates.length > 0) {
-        for (let i = 0; i < Math.min(numberOfPayments, installmentDates.length); i++) {
-          const paymentId = (upcomingPayments.length + newPayments.length + 1).toString();
-          const paymentDate = format(installmentDates[i], 'yyyy-MM-dd');
-          
-          newPayments.push({
-            id: paymentId,
-            date: paymentDate,
-            amount: expense.amount,
-            description: `${expense.description} (${i+1}/${numberOfPayments})`,
-            type: 'installment',
-            category: expense.category,
-            bank: expense.bank
-          });
-        }
-      } 
-      // Sinon, générer des dates mensuelles par défaut
-      else {
-        const startDate = expense.date;
-        
-        for (let i = 0; i < numberOfPayments; i++) {
-          const paymentId = (upcomingPayments.length + newPayments.length + 1).toString();
-          const currentDate = new Date(startDate);
-          currentDate.setMonth(currentDate.getMonth() + i);
-          const paymentDate = format(currentDate, 'yyyy-MM-dd');
-          
-          newPayments.push({
-            id: paymentId,
-            date: paymentDate,
-            amount: expense.amount,
-            description: `${expense.description} (${i+1}/${numberOfPayments})`,
-            type: 'installment',
-            category: expense.category,
-            bank: expense.bank
-          });
-        }
-      }
-    }
-    
-    // Ajouter tous les nouveaux paiements
-    upcomingPayments = [...upcomingPayments, ...newPayments];
-    return upcomingPayments;
+
+    const errorBody = await response.text();
+    throw new Error(errorBody || `Erreur API ${response.status}`);
   }
+
+  if (response.status === 204) {
+    return undefined as T;
+  }
+
+  return response.json() as Promise<T>;
+}
+
+function mapExpense(expense: ApiExpense): Expense {
+  return {
+    id: String(expense.id),
+    amount: Number(expense.amount),
+    description: expense.description,
+    category: expense.category?.name ?? `Catégorie #${expense.categoryId}`,
+    bank: expense.bank?.name ?? `Banque #${expense.bankId}`,
+    date: parse(expense.date, 'dd/MM/yyyy', new Date()),
+    type: expense.type,
+    categoryId: expense.categoryId,
+    bankId: expense.bankId,
+    occurrenceId: expense.occurrenceId,
+  };
+}
+
+function mapPaymentEvent(item: CalendarProjectionItem): PaymentEvent {
+  return {
+    id: `${item.kind}-${item.id}`,
+    date: toCalendarDate(item.dueDate),
+    amount: Number(item.amount),
+    description: item.ownerName,
+    type: item.kind,
+    category: item.categoryName ?? (item.categoryId ? `Catégorie #${item.categoryId}` : ''),
+    bank: item.bankName ?? (item.bankId ? `Banque #${item.bankId}` : ''),
+    status: item.status,
+    ownerId: item.ownerId,
+    expenseId: item.expenseId,
+  };
+}
+
+export const expenseService = {
+  getAllExpenses: async (): Promise<Expense[]> => {
+    const expenses = await request<ApiExpense[]>('/expenses');
+    return expenses.map(mapExpense);
+  },
+
+  getTodayExpenses: async (): Promise<Expense[]> => {
+    const expenses = await request<ApiExpense[]>('/expenses/today');
+    return expenses.map(mapExpense);
+  },
+
+  getExpense: async (id: string | number): Promise<Expense> => {
+    const expense = await request<ApiExpense>(`/expenses/${id}`);
+    return mapExpense(expense);
+  },
+
+  getCategories: (): Promise<Category[]> => request<Category[]>('/categories'),
+
+  getBanks: (): Promise<Bank[]> => request<Bank[]>('/banks'),
+
+  getActiveSubscriptions: (): Promise<Subscription[]> => request<Subscription[]>('/subscriptions/active'),
+
+  getSubscription: (id: string | number): Promise<Subscription> =>
+    request<Subscription>(`/subscriptions/${id}`),
+
+  getActiveInstallments: (): Promise<Installment[]> => request<Installment[]>('/installments/active'),
+
+  getInstallment: (id: string | number): Promise<Installment> =>
+    request<Installment>(`/installments/${id}`),
+
+  updateOccurrenceStatus: (
+    type: 'subscription' | 'installment',
+    occurrenceId: number,
+    status: OccurrenceStatus,
+  ): Promise<{ status: OccurrenceStatus }> =>
+    request<{ status: OccurrenceStatus }>(`/calendar/occurrences/${type}/${occurrenceId}/status`, {
+      method: 'PATCH',
+      body: JSON.stringify({ status }),
+    }),
+
+  getAllUpcomingPayments: async (startDate?: Date, endDate?: Date): Promise<PaymentEvent[]> => {
+    const params = new URLSearchParams();
+
+    if (startDate) params.set('startDate', toFrenchDate(startDate));
+    if (endDate) params.set('endDate', toFrenchDate(endDate));
+
+    const queryString = params.toString();
+    const projection = await request<CalendarProjectionItem[]>(
+      `/calendar/projection${queryString ? `?${queryString}` : ''}`,
+    );
+
+    return projection.map(mapPaymentEvent);
+  },
+
+  getPaymentsForDate: async (date: string): Promise<PaymentEvent[]> => {
+    const selectedDate = parse(date, 'yyyy-MM-dd', new Date());
+    const payments = await expenseService.getAllUpcomingPayments(selectedDate, selectedDate);
+    return payments.filter((payment) => payment.date === date);
+  },
+
+  addExpense: async (expense: CreateExpenseInput): Promise<Expense | unknown> => {
+    if (expense.type === 'subscription') {
+      return request('/subscriptions', {
+        method: 'POST',
+        body: JSON.stringify({
+          name: expense.description,
+          amount: expense.amount,
+          frequency: expense.frequency ?? 'monthly',
+          dayOfMonth: expense.date.getDate(),
+          dayOfWeek: expense.date.getDay(),
+          startDate: toFrenchDate(expense.date),
+          endDate: expense.endDate ? toFrenchDate(expense.endDate) : undefined,
+          isActive: true,
+          categoryId: expense.categoryId,
+          bankId: expense.bankId,
+        }),
+      });
+    }
+
+    if (expense.type === 'installment') {
+      return request('/installments', {
+        method: 'POST',
+        body: JSON.stringify({
+          name: expense.description,
+          totalAmount: expense.totalAmount ?? expense.amount,
+          numberOfPayments: expense.numberOfPayments ?? 1,
+          startDate: toFrenchDate(expense.date),
+          nextPaymentDate: toFrenchDate(expense.date),
+          customPaymentDates: expense.installmentDates?.map(toFrenchDate),
+          isCompleted: false,
+          categoryId: expense.categoryId,
+          bankId: expense.bankId,
+        }),
+      });
+    }
+
+    const createdExpense = await request<ApiExpense>('/expenses', {
+      method: 'POST',
+      body: JSON.stringify({
+        amount: expense.amount,
+        description: expense.description,
+        date: toFrenchDate(expense.date),
+        type: 'simple',
+        source: 'manual',
+        categoryId: expense.categoryId,
+        bankId: expense.bankId,
+      }),
+    });
+
+    return mapExpense(createdExpense);
+  },
 };
