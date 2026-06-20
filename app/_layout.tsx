@@ -1,13 +1,12 @@
 import FontAwesome from '@expo/vector-icons/FontAwesome';
-import { DarkTheme, DefaultTheme, ThemeProvider } from '@react-navigation/native';
+import { DefaultTheme, ThemeProvider } from '@react-navigation/native';
 import { useFonts } from 'expo-font';
 import { Stack } from 'expo-router';
 import * as SplashScreen from 'expo-splash-screen';
 import { useEffect } from 'react';
 import 'react-native-reanimated';
 
-import { useColorScheme } from '@/components/useColorScheme';
-import { ThemeModeProvider } from '@/components/ThemeModeProvider';
+import { ThemeModeProvider, useThemeMode } from '@/components/ThemeModeProvider';
 
 export { ErrorBoundary } from 'expo-router';
 
@@ -45,15 +44,35 @@ export default function RootLayout() {
 }
 
 function RootLayoutNav() {
-  const colorScheme = useColorScheme();
+  const { colorScheme, colors } = useThemeMode();
 
   return (
-    <ThemeProvider value={colorScheme === 'dark' ? DarkTheme : DefaultTheme}>
-      <Stack>
+    <ThemeProvider
+      value={{
+        dark: colorScheme === 'dark',
+        colors: {
+          primary: colors.primary,
+          background: colors.background,
+          card: colors.surface,
+          text: colors.text,
+          border: colors.border,
+          notification: colors.danger,
+        },
+        fonts: DefaultTheme.fonts,
+      }}
+    >
+      <Stack
+        screenOptions={{
+          headerStyle: { backgroundColor: colors.surface },
+          headerTintColor: colors.text,
+          contentStyle: { backgroundColor: colors.background },
+        }}
+      >
         <Stack.Screen name="login" options={{ headerShown: false }} />
         <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
         <Stack.Screen name="modal" options={{ presentation: 'modal' }} />
         <Stack.Screen name="add-expense" options={{ presentation: 'modal', title: 'Ajouter une dépense' }} />
+        <Stack.Screen name="payment-detail" options={{ title: 'Détail du paiement' }} />
       </Stack>
     </ThemeProvider>
   );

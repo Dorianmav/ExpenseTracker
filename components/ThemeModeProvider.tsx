@@ -1,12 +1,16 @@
 import React, { createContext, useContext, useEffect, useMemo, useState } from 'react';
 import { ColorSchemeName } from 'react-native';
+import { AppColorScheme, PaletteName, defaultPaletteName, palettes } from '@/constants/Colors';
 
 export type ThemeMode = 'auto' | 'light' | 'dark';
 
 type ThemeModeContextValue = {
   mode: ThemeMode;
+  paletteName: PaletteName;
   colorScheme: NonNullable<ColorSchemeName>;
+  colors: AppColorScheme;
   setMode: (mode: ThemeMode) => void;
+  setPaletteName: (paletteName: PaletteName) => void;
   cycleMode: () => void;
 };
 
@@ -25,6 +29,7 @@ const getNextMode = (mode: ThemeMode): ThemeMode => {
 
 export function ThemeModeProvider({ children }: { children: React.ReactNode }) {
   const [mode, setMode] = useState<ThemeMode>('auto');
+  const [paletteName, setPaletteName] = useState<PaletteName>(defaultPaletteName);
   const [automaticScheme, setAutomaticScheme] = useState<NonNullable<ColorSchemeName>>(getAutomaticScheme);
 
   useEffect(() => {
@@ -35,14 +40,20 @@ export function ThemeModeProvider({ children }: { children: React.ReactNode }) {
     return () => clearInterval(interval);
   }, []);
 
+  const colorScheme = mode === 'auto' ? automaticScheme : mode;
+  const colors = palettes[paletteName][colorScheme];
+
   const value = useMemo<ThemeModeContextValue>(
     () => ({
       mode,
-      colorScheme: mode === 'auto' ? automaticScheme : mode,
+      paletteName,
+      colorScheme,
+      colors,
       setMode,
+      setPaletteName,
       cycleMode: () => setMode((currentMode) => getNextMode(currentMode)),
     }),
-    [automaticScheme, mode],
+    [colorScheme, colors, mode, paletteName],
   );
 
   return <ThemeModeContext.Provider value={value}>{children}</ThemeModeContext.Provider>;
