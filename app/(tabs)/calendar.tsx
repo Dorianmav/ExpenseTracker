@@ -1,28 +1,34 @@
 import React, { useMemo, useState } from 'react';
-import { StyleSheet, FlatList, TouchableOpacity } from 'react-native';
-import { Text, View } from '@/components/Themed';
+import { StyleSheet, FlatList, TouchableOpacity, View as NativeView } from 'react-native';
+import { Text, View, useThemeColor } from '@/components/Themed';
 import { Calendar, LocaleConfig } from 'react-native-calendars';
+import type { DateData } from 'react-native-calendars';
 import { addMonths, endOfMonth, format, parse, startOfMonth, subMonths } from 'date-fns';
 import { fr } from 'date-fns/locale';
 import { useFocusEffect } from '@react-navigation/native';
 import { router } from 'expo-router';
 import { expenseService, PaymentEvent } from '@/services/expenseService';
+import { useThemeMode } from '@/components/ThemeModeProvider';
+
+type CalendarTheme = React.ComponentProps<typeof Calendar>['theme'] & Record<string, unknown>;
 
 type MarkedDates = {
   [date: string]: {
     selected?: boolean;
     selectedColor?: string;
     dots?: {
-      key: string;
+      key?: string;
       color: string;
     }[];
   };
 };
 
-const paymentTypeColors = {
-  subscription: '#3498db',
-  installment: '#e74c3c',
-} as const;
+type CalendarDayProps = {
+  date?: DateData;
+  marking?: MarkedDates[string];
+  state?: string;
+  onPress?: (date?: DateData) => void;
+};
 
 const getProjectionRange = (month: string) => {
   const currentMonthDate = parse(`${month}-01`, 'yyyy-MM-dd', new Date());
@@ -33,7 +39,7 @@ const getProjectionRange = (month: string) => {
   };
 };
 
-LocaleConfig.locales['fr'] = {
+LocaleConfig.locales.fr = {
   monthNames: [
     'Janvier',
     'Février',
@@ -55,8 +61,16 @@ LocaleConfig.locales['fr'] = {
 };
 LocaleConfig.defaultLocale = 'fr';
 
-
 export default function CalendarScreen() {
+  const { colorScheme, paletteName } = useThemeMode();
+  const primaryColor = useThemeColor({}, 'primary');
+  const secondaryColor = useThemeColor({}, 'secondary');
+  const cardColor = useThemeColor({}, 'card');
+  const calendarBackground = useThemeColor({}, 'calendarBackground');
+  const borderColor = useThemeColor({}, 'border');
+  const mutedColor = useThemeColor({}, 'muted');
+  const textColor = useThemeColor({}, 'text');
+  const dangerColor = useThemeColor({}, 'danger');
   const today = format(new Date(), 'yyyy-MM-dd');
   const [selectedDate, setSelectedDate] = useState(today);
   const [upcomingPayments, setUpcomingPayments] = useState<PaymentEvent[]>([]);
@@ -64,6 +78,157 @@ export default function CalendarScreen() {
   const [calendarKey, setCalendarKey] = useState(0);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  const paymentTypeColors = useMemo(
+    () => ({
+      subscription: secondaryColor,
+      installment: dangerColor,
+    }),
+    [dangerColor, secondaryColor],
+  );
+  const calendarTheme = useMemo<CalendarTheme>(
+    () => ({
+      calendarBackground,
+      monthTextColor: textColor,
+      dayTextColor: textColor,
+      textDisabledColor: mutedColor,
+      textSectionTitleColor: mutedColor,
+      selectedDayBackgroundColor: primaryColor,
+      selectedDayTextColor: '#fff',
+      todayTextColor: secondaryColor,
+      arrowColor: primaryColor,
+      dotColor: primaryColor,
+      textMonthFontWeight: '800',
+      textDayFontWeight: '600',
+      'stylesheet.calendar.main': {
+        calendarContainer: {
+          backgroundColor: calendarBackground,
+        },
+        week: {
+          backgroundColor: calendarBackground,
+          marginTop: 3,
+          marginBottom: 3,
+          flexDirection: 'row',
+          justifyContent: 'space-around',
+        },
+      },
+      'stylesheet.calendar.header': {
+        header: {
+          backgroundColor: calendarBackground,
+          flexDirection: 'row',
+          justifyContent: 'space-between',
+          paddingLeft: 10,
+          paddingRight: 10,
+          marginTop: 2,
+          alignItems: 'center',
+        },
+        monthText: {
+          color: textColor,
+          fontSize: 18,
+          fontWeight: '800',
+          margin: 6,
+        },
+      },
+      'stylesheet.day.basic': {
+        base: {
+          width: 32,
+          height: 30,
+          alignItems: 'center',
+        },
+        selected: {
+          backgroundColor: primaryColor,
+          borderRadius: 6,
+        },
+        today: {
+          borderRadius: 6,
+        },
+      },
+      stylesheet: {
+        calendar: {
+          main: {
+            calendarContainer: {
+              backgroundColor: calendarBackground,
+            },
+            week: {
+              backgroundColor: calendarBackground,
+              marginTop: 3,
+              marginBottom: 3,
+              flexDirection: 'row',
+              justifyContent: 'space-around',
+            },
+          },
+        },
+        'stylesheet.calendar.main': {
+          calendarContainer: {
+            backgroundColor: calendarBackground,
+          },
+          week: {
+            backgroundColor: calendarBackground,
+            marginTop: 3,
+            marginBottom: 3,
+            flexDirection: 'row',
+            justifyContent: 'space-around',
+          },
+        },
+        day: {
+          basic: {
+            base: {
+              backgroundColor: calendarBackground,
+            },
+          },
+        },
+        'calendar.header': {
+          header: {
+            backgroundColor: calendarBackground,
+            flexDirection: 'row',
+            justifyContent: 'space-between',
+            paddingLeft: 10,
+            paddingRight: 10,
+            marginTop: 2,
+            alignItems: 'center',
+          },
+          monthText: {
+            color: textColor,
+            fontSize: 18,
+            fontWeight: '800',
+            margin: 6,
+          },
+        },
+        'stylesheet.calendar.header': {
+          header: {
+            backgroundColor: calendarBackground,
+            flexDirection: 'row',
+            justifyContent: 'space-between',
+            paddingLeft: 10,
+            paddingRight: 10,
+            marginTop: 2,
+            alignItems: 'center',
+          },
+          monthText: {
+            color: textColor,
+            fontSize: 18,
+            fontWeight: '800',
+            margin: 6,
+          },
+        },
+        'stylesheet.day.basic': {
+          base: {
+            width: 32,
+            height: 30,
+            alignItems: 'center',
+          },
+          selected: {
+            backgroundColor: primaryColor,
+            borderRadius: 6,
+          },
+          today: {
+            borderRadius: 6,
+          },
+        },
+      },
+    }),
+    [calendarBackground, mutedColor, primaryColor, secondaryColor, textColor],
+  );
 
   const loadPayments = React.useCallback(async () => {
     setIsLoading(true);
@@ -97,18 +262,21 @@ export default function CalendarScreen() {
     const dates = upcomingPayments.reduce((acc: MarkedDates, payment) => {
       const currentDate = acc[payment.date] ?? {};
       const existingDots = currentDate.dots ?? [];
+      const dotKey = payment.type;
 
       return {
         ...acc,
         [payment.date]: {
           ...currentDate,
-          dots: [
-            ...existingDots,
-            {
-              key: payment.id,
-              color: paymentTypeColors[payment.type],
-            },
-          ],
+          dots: existingDots.some((dot) => dot.key === dotKey)
+            ? existingDots
+            : [
+                ...existingDots,
+                {
+                  key: dotKey,
+                  color: paymentTypeColors[payment.type],
+                },
+              ],
         },
       };
     }, {} as MarkedDates);
@@ -118,16 +286,67 @@ export default function CalendarScreen() {
       [selectedDate]: {
         ...dates[selectedDate],
         selected: true,
-        selectedColor: '#2ecc71',
+        selectedColor: primaryColor,
       },
     };
-  }, [selectedDate, upcomingPayments]);
+  }, [paymentTypeColors, selectedDate, upcomingPayments]);
 
   const paymentsForSelectedDate = upcomingPayments.filter((payment) => payment.date === selectedDate);
 
+  const renderCalendarDay = React.useCallback(
+    ({ date, marking, state, onPress }: CalendarDayProps) => {
+      if (!date) return null;
+
+      const isSelected = Boolean(marking?.selected);
+      const isDisabled = state === 'disabled';
+      const isToday = date.dateString === today;
+      const dots = marking?.dots ?? [];
+
+      return (
+        <TouchableOpacity
+          activeOpacity={0.75}
+          style={[
+            styles.dayCell,
+            isSelected && { backgroundColor: primaryColor },
+          ]}
+          onPress={() => onPress?.(date)}
+          disabled={isDisabled}
+        >
+          <Text
+            style={[
+              styles.dayText,
+              { color: isDisabled ? mutedColor : textColor },
+              isToday && !isSelected && { color: secondaryColor },
+              isSelected && styles.selectedDayText,
+            ]}
+          >
+            {date.day}
+          </Text>
+          {dots.length > 0 && (
+            <NativeView style={styles.dayDots}>
+              {dots.slice(0, 2).map((dot) => (
+                <NativeView
+              key={dot.key ?? dot.color}
+                  style={[
+                    styles.dayDot,
+                    {
+                      backgroundColor: dot.color,
+                      borderColor: isSelected ? '#fff' : calendarBackground,
+                    },
+                  ]}
+                />
+              ))}
+            </NativeView>
+          )}
+        </TouchableOpacity>
+      );
+    },
+    [calendarBackground, mutedColor, primaryColor, secondaryColor, textColor, today],
+  );
+
   const renderPaymentItem = ({ item }: { item: PaymentEvent }) => (
     <TouchableOpacity
-      style={styles.paymentItem}
+      style={[styles.paymentItem, { backgroundColor: cardColor, borderColor }]}
       onPress={() =>
         router.push({
           pathname: '/payment-detail',
@@ -135,15 +354,17 @@ export default function CalendarScreen() {
         })
       }
     >
-      <View style={styles.paymentHeader}>
+      <View style={styles.paymentHeader} lightColor={cardColor} darkColor={cardColor}>
         <Text style={styles.paymentDescription}>{item.description}</Text>
-        <Text style={styles.paymentAmount}>{item.amount.toFixed(2)} €</Text>
+        <Text style={[styles.paymentAmount, { color: dangerColor }]}>{item.amount.toFixed(2)} €</Text>
       </View>
-      <View style={styles.paymentDetails}>
-        <Text style={styles.paymentType}>
+      <View style={styles.paymentDetails} lightColor={cardColor} darkColor={cardColor}>
+        <Text style={[styles.paymentType, { color: mutedColor }]}>
           {item.type === 'subscription' ? 'Abonnement' : 'Paiement échelonné'}
         </Text>
-        <Text style={styles.paymentBank}>{item.status === 'paid' ? 'Payé' : 'À venir'}</Text>
+        <Text style={[styles.paymentBank, { color: mutedColor }]}>
+          {item.status === 'paid' ? 'Payé' : item.status === 'late' ? 'En retard' : 'À venir'}
+        </Text>
       </View>
     </TouchableOpacity>
   );
@@ -152,20 +373,17 @@ export default function CalendarScreen() {
     <View style={styles.container}>
       <View style={styles.headerContainer}>
         <Text style={styles.title}>Calendrier des paiements</Text>
-        <TouchableOpacity style={styles.todayButton} onPress={goToToday}>
+        <TouchableOpacity style={[styles.todayButton, { backgroundColor: primaryColor }]} onPress={goToToday}>
           <Text style={styles.todayButtonText}>Aujourd'hui</Text>
         </TouchableOpacity>
       </View>
 
       <Calendar
-        key={calendarKey}
-        style={styles.calendar}
-        theme={{
-          todayTextColor: '#2ecc71',
-          arrowColor: '#3498db',
-        }}
-        markingType={'multi-dot'}
+        key={`${calendarKey}-${paletteName}-${colorScheme}`}
+        style={[styles.calendar, { backgroundColor: calendarBackground, borderColor }]}
+        theme={calendarTheme}
         markedDates={markedDates}
+        dayComponent={renderCalendarDay}
         onDayPress={(day) => setSelectedDate(day.dateString)}
         onMonthChange={(month) => setCurrentMonth(month.dateString.substring(0, 7))}
         monthFormat="MMMM yyyy"
@@ -178,12 +396,12 @@ export default function CalendarScreen() {
 
       <View style={styles.legendContainer}>
         <View style={styles.legendItem}>
-          <View style={[styles.legendDot, { backgroundColor: '#3498db' }]} />
-          <Text style={styles.legendText}>Abonnements</Text>
+          <View style={[styles.legendDot, { backgroundColor: primaryColor }]} />
+          <Text style={[styles.legendText, { color: mutedColor }]}>Abonnements</Text>
         </View>
         <View style={styles.legendItem}>
-          <View style={[styles.legendDot, { backgroundColor: '#e74c3c' }]} />
-          <Text style={styles.legendText}>Paiements échelonnés</Text>
+          <View style={[styles.legendDot, { backgroundColor: dangerColor }]} />
+          <Text style={[styles.legendText, { color: mutedColor }]}>Paiements échelonnés</Text>
         </View>
       </View>
 
@@ -193,7 +411,7 @@ export default function CalendarScreen() {
 
       {isLoading ? (
         <View style={styles.emptyContainer}>
-          <Text style={styles.emptyText}>Chargement...</Text>
+          <Text style={[styles.emptyText, { color: mutedColor }]}>Chargement...</Text>
         </View>
       ) : error ? (
         <View style={styles.emptyContainer}>
@@ -205,10 +423,11 @@ export default function CalendarScreen() {
           renderItem={renderPaymentItem}
           keyExtractor={(item) => item.id}
           style={styles.list}
+          contentContainerStyle={styles.listContent}
         />
       ) : (
         <View style={styles.emptyContainer}>
-          <Text style={styles.emptyText}>Aucun paiement prévu pour cette date</Text>
+          <Text style={[styles.emptyText, { color: mutedColor }]}>Aucun paiement prévu pour cette date</Text>
         </View>
       )}
     </View>
@@ -219,42 +438,78 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     padding: 16,
+    paddingTop: 48,
     width: '100%',
   },
   headerContainer: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
+    gap: 12,
     marginBottom: 20,
   },
   title: {
-    fontSize: 24,
-    fontWeight: 'bold',
+    fontSize: 26,
+    fontWeight: '900',
     flex: 1,
   },
   todayButton: {
-    backgroundColor: '#3498db',
-    paddingVertical: 8,
+    paddingVertical: 10,
     paddingHorizontal: 16,
-    borderRadius: 20,
+    borderRadius: 24,
   },
   todayButtonText: {
     color: 'white',
-    fontWeight: '500',
+    fontWeight: '800',
+  },
+  dayCell: {
+    width: 32,
+    height: 32,
+    borderRadius: 6,
+    alignItems: 'center',
+    justifyContent: 'center',
+    position: 'relative',
+  },
+  dayText: {
+    fontSize: 16,
+    fontWeight: '700',
+    lineHeight: 22,
+  },
+  selectedDayText: {
+    color: '#fff',
+  },
+  dayDots: {
+    position: 'absolute',
+    bottom: 3,
+    left: 0,
+    right: 0,
+    flexDirection: 'row',
+    justifyContent: 'center',
+    gap: 3,
+  },
+  dayDot: {
+    width: 5,
+    height: 5,
+    borderRadius: 3,
+    borderWidth: 1,
   },
   calendar: {
-    borderRadius: 10,
+    borderWidth: 1,
+    borderRadius: 20,
+    overflow: 'hidden',
     elevation: 4,
     shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    marginBottom: 20,
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.12,
+    shadowRadius: 18,
+    marginBottom: 14,
+    paddingBottom: 2,
   },
   legendContainer: {
     flexDirection: 'row',
-    justifyContent: 'space-around',
-    marginBottom: 20,
+    justifyContent: 'center',
+    gap: 28,
+    marginBottom: 14,
     paddingHorizontal: 10,
   },
   legendItem: {
@@ -265,61 +520,66 @@ const styles = StyleSheet.create({
     width: 12,
     height: 12,
     borderRadius: 6,
-    marginRight: 6,
+    marginRight: 8,
   },
   legendText: {
     fontSize: 14,
-    color: '#7f8c8d',
+    fontWeight: '700',
   },
   sectionTitle: {
-    fontSize: 18,
-    fontWeight: '500',
-    marginBottom: 10,
+    fontSize: 20,
+    fontWeight: '800',
+    marginBottom: 12,
     textTransform: 'capitalize',
   },
   list: {
     width: '100%',
   },
+  listContent: {
+    paddingBottom: 24,
+  },
   paymentItem: {
-    backgroundColor: '#fff',
-    borderRadius: 8,
+    borderWidth: 1,
+    borderRadius: 20,
     padding: 16,
     marginBottom: 12,
     shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.2,
-    shadowRadius: 2,
-    elevation: 2,
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.12,
+    shadowRadius: 16,
+    elevation: 3,
   },
   paymentHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 8,
+    alignItems: 'flex-start',
+    gap: 12,
+    marginBottom: 10,
   },
   paymentDescription: {
-    fontSize: 16,
-    fontWeight: '500',
+    fontSize: 17,
+    fontWeight: '800',
     flex: 1,
-    marginRight: 12,
   },
   paymentAmount: {
     fontSize: 18,
-    fontWeight: 'bold',
-    color: '#e74c3c',
+    fontWeight: '900',
   },
   paymentDetails: {
     flexDirection: 'row',
     justifyContent: 'space-between',
+    gap: 12,
   },
   paymentType: {
+    flex: 1,
     fontSize: 14,
-    color: '#7f8c8d',
-    fontStyle: 'italic',
+    fontWeight: '700',
   },
   paymentBank: {
+    flex: 1,
     fontSize: 14,
-    color: '#7f8c8d',
+    fontWeight: '700',
+    textAlign: 'right',
   },
   emptyContainer: {
     flex: 1,
@@ -329,7 +589,6 @@ const styles = StyleSheet.create({
   },
   emptyText: {
     fontSize: 16,
-    color: '#95a5a6',
     textAlign: 'center',
   },
 });
