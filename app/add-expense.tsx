@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { Alert, StyleSheet, TouchableOpacity, TextInput, ScrollView } from 'react-native';
-import { Text, View } from '@/components/Themed';
+import { Text, View, useThemeColor } from '@/components/Themed';
 import { router } from 'expo-router';
 import FontAwesome from '@expo/vector-icons/FontAwesome';
 import DateTimePicker from '@react-native-community/datetimepicker';
@@ -9,6 +9,17 @@ import { fr } from 'date-fns/locale';
 import { Bank, Category, expenseService, PaymentType } from '@/services/expenseService';
 
 export default function AddExpenseScreen() {
+  const cardColor = useThemeColor({}, 'card');
+  const borderColor = useThemeColor({}, 'border');
+  const textColor = useThemeColor({}, 'text');
+  const mutedColor = useThemeColor({}, 'muted');
+  const primaryColor = useThemeColor({}, 'primary');
+  const successColor = useThemeColor({}, 'success');
+  const inputStyle = [styles.input, { backgroundColor: cardColor, borderColor, color: textColor }];
+  const dateButtonStyle = [styles.dateButton, { backgroundColor: cardColor, borderColor }];
+  const inactivePillStyle = { backgroundColor: cardColor, borderColor };
+  const activePrimaryPillStyle = { backgroundColor: primaryColor, borderColor: primaryColor };
+  const activeSuccessPillStyle = { backgroundColor: successColor, borderColor: successColor };
   const [amount, setAmount] = useState('');
   const [description, setDescription] = useState('');
   const [date, setDate] = useState(new Date());
@@ -169,7 +180,8 @@ export default function AddExpenseScreen() {
       <View style={styles.inputContainer}>
         <Text style={styles.label}>Montant</Text>
         <TextInput
-          style={styles.input}
+          style={inputStyle}
+          placeholderTextColor={mutedColor}
           value={amount}
           onChangeText={setAmount}
           placeholder="0.00"
@@ -180,7 +192,8 @@ export default function AddExpenseScreen() {
       <View style={styles.inputContainer}>
         <Text style={styles.label}>Description</Text>
         <TextInput
-          style={styles.input}
+          style={inputStyle}
+          placeholderTextColor={mutedColor}
           value={description}
           onChangeText={setDescription}
           placeholder="Description de la dépense"
@@ -189,9 +202,9 @@ export default function AddExpenseScreen() {
 
       <View style={styles.inputContainer}>
         <Text style={styles.label}>Date</Text>
-        <TouchableOpacity style={styles.dateButton} onPress={() => setShowDatePicker(true)}>
+        <TouchableOpacity style={dateButtonStyle} onPress={() => setShowDatePicker(true)}>
           <Text>{format(date, 'dd/MM/yyyy', { locale: fr })}</Text>
-          <FontAwesome name="calendar" size={20} color="#3498db" />
+          <FontAwesome name="calendar" size={20} color={primaryColor} />
         </TouchableOpacity>
         {showDatePicker && (
           <DateTimePicker value={date} mode="date" display="default" onChange={onDateChange} />
@@ -202,7 +215,7 @@ export default function AddExpenseScreen() {
         <Text style={styles.label}>Type de paiement</Text>
         <View style={styles.paymentTypeContainer}>
           <TouchableOpacity
-            style={[styles.paymentTypeButton, paymentType === 'simple' && styles.paymentTypeButtonActive]}
+            style={[styles.paymentTypeButton, inactivePillStyle, paymentType === 'simple' && activePrimaryPillStyle]}
             onPress={() => setPaymentType('simple')}
           >
             <Text style={paymentType === 'simple' ? styles.paymentTypeTextActive : styles.paymentTypeText}>
@@ -211,7 +224,7 @@ export default function AddExpenseScreen() {
           </TouchableOpacity>
 
           <TouchableOpacity
-            style={[styles.paymentTypeButton, paymentType === 'subscription' && styles.paymentTypeButtonActive]}
+            style={[styles.paymentTypeButton, inactivePillStyle, paymentType === 'subscription' && activePrimaryPillStyle]}
             onPress={() => setPaymentType('subscription')}
           >
             <Text style={paymentType === 'subscription' ? styles.paymentTypeTextActive : styles.paymentTypeText}>
@@ -220,7 +233,7 @@ export default function AddExpenseScreen() {
           </TouchableOpacity>
 
           <TouchableOpacity
-            style={[styles.paymentTypeButton, paymentType === 'installment' && styles.paymentTypeButtonActive]}
+            style={[styles.paymentTypeButton, inactivePillStyle, paymentType === 'installment' && activePrimaryPillStyle]}
             onPress={() => setPaymentType('installment')}
           >
             <Text style={paymentType === 'installment' ? styles.paymentTypeTextActive : styles.paymentTypeText}>
@@ -242,7 +255,7 @@ export default function AddExpenseScreen() {
               ].map(([value, label]) => (
                 <TouchableOpacity
                   key={value}
-                  style={[styles.frequencyButton, frequency === value && styles.paymentTypeButtonActive]}
+                  style={[styles.frequencyButton, inactivePillStyle, frequency === value && activePrimaryPillStyle]}
                   onPress={() => setFrequency(value as typeof frequency)}
                 >
                   <Text style={frequency === value ? styles.paymentTypeTextActive : styles.paymentTypeText}>
@@ -255,9 +268,9 @@ export default function AddExpenseScreen() {
 
           <View style={styles.inputContainer}>
             <Text style={styles.label}>Date de fin (optionnelle)</Text>
-            <TouchableOpacity style={styles.dateButton} onPress={() => setShowEndDatePicker(true)}>
+            <TouchableOpacity style={dateButtonStyle} onPress={() => setShowEndDatePicker(true)}>
               <Text>{endDate ? format(endDate, 'dd/MM/yyyy', { locale: fr }) : 'Non définie'}</Text>
-              <FontAwesome name="calendar" size={20} color="#3498db" />
+              <FontAwesome name="calendar" size={20} color={primaryColor} />
             </TouchableOpacity>
             {showEndDatePicker && (
               <DateTimePicker
@@ -276,7 +289,8 @@ export default function AddExpenseScreen() {
           <View style={styles.inputContainer}>
             <Text style={styles.label}>Montant total</Text>
             <TextInput
-              style={styles.input}
+              style={inputStyle}
+              placeholderTextColor={mutedColor}
               value={totalAmount}
               onChangeText={setTotalAmount}
               placeholder={amount || '0.00'}
@@ -287,7 +301,8 @@ export default function AddExpenseScreen() {
           <View style={styles.inputContainer}>
             <Text style={styles.label}>Nombre de paiements</Text>
             <TextInput
-              style={styles.input}
+              style={inputStyle}
+              placeholderTextColor={mutedColor}
               value={numberOfPayments}
               onChangeText={(value) => {
                 setNumberOfPayments(value);
@@ -304,7 +319,7 @@ export default function AddExpenseScreen() {
               {installmentDates.map((installmentDate, index) => (
                 <TouchableOpacity
                   key={`${installmentDate.toISOString()}-${index}`}
-                  style={styles.dateButton}
+                  style={dateButtonStyle}
                   onPress={() => {
                     setCurrentInstallmentIndex(index);
                     setShowInstallmentDatePicker(true);
@@ -313,7 +328,7 @@ export default function AddExpenseScreen() {
                   <Text>
                     Paiement {index + 1}: {format(installmentDate, 'dd/MM/yyyy', { locale: fr })}
                   </Text>
-                  <FontAwesome name="calendar" size={20} color="#3498db" />
+                  <FontAwesome name="calendar" size={20} color={primaryColor} />
                 </TouchableOpacity>
               ))}
               {showInstallmentDatePicker && (
@@ -335,7 +350,11 @@ export default function AddExpenseScreen() {
           {mainCategories.map((category) => (
             <TouchableOpacity
               key={category.id}
-              style={[styles.categoryButton, selectedMainCategory === category.id && styles.categoryButtonActive]}
+              style={[
+                styles.categoryButton,
+                inactivePillStyle,
+                selectedMainCategory === category.id && activePrimaryPillStyle,
+              ]}
               onPress={() => {
                 setSelectedMainCategory(category.id);
                 setSelectedCategory(category.id);
@@ -353,7 +372,11 @@ export default function AddExpenseScreen() {
             {subCategories.map((subCategory) => (
               <TouchableOpacity
                 key={subCategory.id}
-                style={[styles.subCategoryButton, selectedCategory === subCategory.id && styles.categoryButtonActive]}
+                style={[
+                  styles.subCategoryButton,
+                  inactivePillStyle,
+                  selectedCategory === subCategory.id && activePrimaryPillStyle,
+                ]}
                 onPress={() => setSelectedCategory(subCategory.id)}
               >
                 <Text style={selectedCategory === subCategory.id ? styles.categoryTextActive : styles.categoryText}>
@@ -371,7 +394,11 @@ export default function AddExpenseScreen() {
           {banks.map((bank) => (
             <TouchableOpacity
               key={bank.id}
-              style={[styles.bankButton, selectedBank === bank.id && styles.bankButtonActive]}
+              style={[
+                styles.bankButton,
+                inactivePillStyle,
+                selectedBank === bank.id && activeSuccessPillStyle,
+              ]}
               onPress={() => setSelectedBank(bank.id)}
             >
               <Text style={selectedBank === bank.id ? styles.bankTextActive : styles.bankText}>{bank.name}</Text>
@@ -381,7 +408,11 @@ export default function AddExpenseScreen() {
       </View>
 
       <TouchableOpacity
-        style={[styles.saveButton, (isSaving || isLoadingOptions) && styles.saveButtonDisabled]}
+        style={[
+          styles.saveButton,
+          { backgroundColor: primaryColor },
+          (isSaving || isLoadingOptions) && styles.saveButtonDisabled,
+        ]}
         onPress={handleSave}
         disabled={isSaving || isLoadingOptions}
       >
@@ -395,6 +426,7 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     padding: 16,
+    paddingTop: 48,
   },
   title: {
     fontSize: 24,
@@ -453,7 +485,6 @@ const styles = StyleSheet.create({
     borderColor: '#3498db',
   },
   paymentTypeText: {
-    color: '#333',
   },
   paymentTypeTextActive: {
     color: 'white',
@@ -486,7 +517,6 @@ const styles = StyleSheet.create({
     borderColor: '#3498db',
   },
   categoryText: {
-    color: '#333',
   },
   categoryTextActive: {
     color: 'white',
@@ -519,7 +549,6 @@ const styles = StyleSheet.create({
     borderColor: '#2ecc71',
   },
   bankText: {
-    color: '#333',
   },
   bankTextActive: {
     color: 'white',
